@@ -1,10 +1,11 @@
+import type { BackgroundRenderConfig } from './background';
 import type { FrameModel } from "./frames";
 
 export interface RenderOptions {
   frameScale: number;
   frameOffsetX: number;
   frameOffsetY: number;
-  backgroundColor: string;
+  background: BackgroundRenderConfig;
 }
 
 /** Base fill: at scale 1.0 the phone height = 85% of canvas */
@@ -38,18 +39,21 @@ export function render(
   frameConfig: FrameModel,
   content: HTMLImageElement | HTMLVideoElement | null,
   options: RenderOptions,
+  backgroundImage: CanvasImageSource | null = null
 ) {
   const {
     frameScale,
     frameOffsetX,
     frameOffsetY,
-    backgroundColor,
+    background,
   } = options;
 
   // 1. Clear and fill background
   ctx.clearRect(0, 0, size, size);
-  if (backgroundColor !== "transparent") {
-    ctx.fillStyle = backgroundColor;
+  if (background.mode === 'staticMeshGradient' && backgroundImage) {
+    ctx.drawImage(backgroundImage, 0, 0, size, size);
+  } else if (background.solidColor !== "transparent") {
+    ctx.fillStyle = background.solidColor;
     ctx.fillRect(0, 0, size, size);
   }
 

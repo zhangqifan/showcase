@@ -24,6 +24,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@paper-design/shaders": "^0.0.72",
     "@tailwindcss/vite": "^4.1.18",
     "mediabunny": "^1.34.2",
     "tailwindcss": "^4.1.18"

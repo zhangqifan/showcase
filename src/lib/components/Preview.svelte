@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { prepareBackgroundImage } from '$lib/background-renderer';
   import { store } from '$lib/state.svelte';
   import { FRAMES, getFrameUrl } from '$lib/frames';
   import { render } from '$lib/renderer';
-  import { getRenderOptions } from '$lib/options';
+  import { getBackgroundRenderConfig, getRenderOptions } from '$lib/options';
   import { CANVAS_SIZE } from '$lib/constants';
   import { exportImage, exportVideoMP4 } from '$lib/export.service';
 
@@ -12,6 +13,8 @@
   let ctx = $state<CanvasRenderingContext2D | null>(null);
   let frameImage = $state<HTMLImageElement | null>(null);
   let contentElement = $state<HTMLImageElement | HTMLVideoElement | null>(null);
+  let backgroundCanvas = $state<HTMLCanvasElement | null>(null);
+  let backgroundRevision = $state(0);
   let videoEl: HTMLVideoElement | null = null;
   let rafId = 0;
   let wrapperSize = $state(400);
@@ -86,6 +89,28 @@
   // ====================== Render ======================
 
   $effect(() => {
+    const background = getBackgroundRenderConfig();
+    let active = true;
+
+    if (background.mode !== 'staticMeshGradient') {
+      backgroundCanvas = null;
+      store.setBackgroundError(null);
+      return;
+    }
+
+    void prepareBackgroundImage(background, CANVAS_SIZE).then((result) => {
+      if (!active) return;
+      backgroundCanvas = result.image;
+      backgroundRevision += 1;
+      store.setBackgroundError(result.errorMessage);
+    });
+
+    return () => {
+      active = false;
+    };
+  });
+
+  $effect(() => {
     if (!ctx || !frameImage) return;
     const fc = FRAMES[store.model];
     if (!fc) return;
@@ -96,14 +121,15 @@
       store.frameScale,
       store.frameOffsetX,
       store.frameOffsetY,
-      store.backgroundColor
+      backgroundCanvas,
+      backgroundRevision
     ];
 
     if (store.contentType === 'video' && contentElement) {
       let active = true;
       function loop() {
         if (!active || !ctx || !frameImage) return;
-        render(ctx, CANVAS_SIZE, frameImage, fc, contentElement, opts);
+        render(ctx, CANVAS_SIZE, frameImage, fc, contentElement, opts, backgroundCanvas);
         rafId = requestAnimationFrame(loop);
       }
       rafId = requestAnimationFrame(loop);
@@ -112,7 +138,7 @@
     }
 
     void deps;
-    render(ctx, CANVAS_SIZE, frameImage, fc, contentElement, opts);
+    render(ctx, CANVAS_SIZE, frameImage, fc, contentElement, opts, backgroundCanvas);
   });
 
   function cleanupVideo() {

@@ -5,6 +5,6 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
   optimizeDeps: {
-    include: ["mediabunny"],
+    include: ["mediabunny", "@paper-design/shaders"],
   },
 });
