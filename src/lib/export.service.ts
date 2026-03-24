@@ -189,7 +189,12 @@ export async function exportVideoMP4(
   vid.currentTime = 0;
   await vid.play();
 
-  const useRVFC = 'requestVideoFrameCallback' in vid;
+  type VideoFrameCallback = (now: number, meta: { mediaTime: number }) => void;
+  type VideoWithRVFC = HTMLVideoElement & {
+    requestVideoFrameCallback?: (callback: VideoFrameCallback) => number;
+  };
+  const vidWithRVFC = vid as VideoWithRVFC;
+  const useRVFC = typeof vidWithRVFC.requestVideoFrameCallback === 'function';
   await new Promise<void>((resolve) => {
     let lastT = -1;
 
@@ -204,12 +209,12 @@ export async function exportVideoMP4(
     if (useRVFC) {
       function onRVFC(_now: number, meta: { mediaTime: number }) {
         captureFrame(meta.mediaTime).then(() => {
-          if (!vid.ended && !vid.paused) {
-            (vid as unknown as { requestVideoFrameCallback(f: typeof onRVFC): void }).requestVideoFrameCallback(onRVFC);
+          if (!vid.ended && !vid.paused && vidWithRVFC.requestVideoFrameCallback) {
+            vidWithRVFC.requestVideoFrameCallback(onRVFC);
           }
         });
       }
-      (vid as unknown as { requestVideoFrameCallback(f: typeof onRVFC): void }).requestVideoFrameCallback(onRVFC);
+      vidWithRVFC.requestVideoFrameCallback?.(onRVFC);
     } else {
       const ivl = setInterval(() => {
         if (vid.ended || vid.paused) {

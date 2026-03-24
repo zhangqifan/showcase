@@ -18,8 +18,13 @@ export interface BackgroundRenderResult {
   errorMessage: string | null;
 }
 
-const staticMeshInstances = new Map<number, StaticMeshInstance>();
-const STATIC_MESH_FALLBACK_ERROR = 'Mesh Gradient 不可用，已自动回退为纯色背景。';
+const staticMeshInstances = new Map<string, StaticMeshInstance>();
+const staticMeshFallbackCache = new Map<string, HTMLCanvasElement>();
+const STATIC_MESH_FALLBACK_ERROR = 'Mesh Gradient 渲染失败，已使用简化预览。';
+const STATIC_MESH_WEBGL_FALLBACK_ERROR = '当前环境不支持 WebGL2，已使用简化 Mesh Gradient 预览。';
+
+let webgl2SupportChecked = false;
+let webgl2Supported = false;
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
@@ -46,6 +51,20 @@ function getInstanceKey(size: number, cacheKey?: string): string {
   return cacheKey ? `${size}:${cacheKey}` : `${size}`;
 }
 
+function checkWebgl2Support(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  if (!webgl2SupportChecked) {
+    const canvas = document.createElement('canvas');
+    webgl2Supported = !!canvas.getContext('webgl2');
+    webgl2SupportChecked = true;
+  }
+  return webgl2Supported;
+}
+
+export function isStaticMeshGradientSupported(): boolean {
+  return checkWebgl2Support();
+}
+
 function destroyInstance(instanceKey: string) {
   const instance = staticMeshInstances.get(instanceKey);
   if (!instance) return;
@@ -57,6 +76,78 @@ function destroyInstance(instanceKey: string) {
 
 function getStaticMeshSignature(config: StaticMeshGradientConfig): string {
   return JSON.stringify(config);
+}
+
+function toCanvasColor(color: string, alphaMultiplier = 1): string {
+  const [r, g, b, a] = getShaderColorFromString(color);
+  const alpha = Math.max(0, Math.min(1, a * alphaMultiplier));
+  return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
+}
+
+function createStaticMeshFallbackCanvas(
+  size: number,
+  config: StaticMeshGradientConfig,
+  cacheKey?: string
+): HTMLCanvasElement {
+  const signature = getStaticMeshSignature(config);
+  const key = `${getInstanceKey(size, cacheKey)}:fallback:${signature}`;
+  const cached = staticMeshFallbackCache.get(key);
+  if (cached) return cached;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext('2d');
+  if (!context) return canvas;
+
+  const [firstColor] = config.colors;
+  context.fillStyle = toCanvasColor(firstColor ?? '#ffffff');
+  context.fillRect(0, 0, size, size);
+
+  const rotation = (config.rotation * Math.PI) / 180;
+  const scale = Math.max(0.01, config.scale);
+  const offsetX = config.offsetX * size * 0.22;
+  const offsetY = config.offsetY * size * 0.22;
+  const waveX = config.waveX;
+  const waveY = config.waveY;
+  const waveXShift = config.waveXShift * Math.PI * 2;
+  const waveYShift = config.waveYShift * Math.PI * 2;
+
+  context.save();
+  context.translate(size / 2 + offsetX, size / 2 + offsetY);
+  context.rotate(rotation);
+  context.scale(scale, scale);
+  context.translate(-size / 2, -size / 2);
+  context.globalCompositeOperation = 'screen';
+
+  for (let index = 0; index < config.colors.length; index += 1) {
+    const color = config.colors[index] ?? '#ffffff';
+    const seed = 0.33 * config.positions + index * 1.37;
+    const xWave = waveX * Math.cos(seed * 2.1 + waveXShift + index * 0.35);
+    const yWave = waveY * Math.sin(seed * 1.7 + waveYShift - index * 0.28);
+    const cx = (0.5 + 0.34 * Math.sin(seed + xWave)) * size;
+    const cy = (0.5 + 0.34 * Math.cos(seed + yWave)) * size;
+    const radius = size * (0.24 + (1 - config.mixing) * 0.2 + (index % 4) * 0.03);
+    const alpha = 0.52 + config.mixing * 0.36;
+
+    const radial = context.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    radial.addColorStop(0, toCanvasColor(color, alpha));
+    radial.addColorStop(1, toCanvasColor(color, 0));
+
+    context.fillStyle = radial;
+    context.fillRect(0, 0, size, size);
+  }
+
+  context.restore();
+  staticMeshFallbackCache.set(key, canvas);
+
+  if (staticMeshFallbackCache.size > 80) {
+    const oldestKey = staticMeshFallbackCache.keys().next().value;
+    if (oldestKey) staticMeshFallbackCache.delete(oldestKey);
+  }
+
+  return canvas;
 }
 
 function buildStaticMeshUniforms(config: StaticMeshGradientConfig) {
@@ -158,6 +249,7 @@ async function ensureStaticMeshInstance(size: number, cacheKey?: string): Promis
     };
     staticMeshInstances.set(instanceKey, instance);
     await waitForCanvasReady(mount.canvasElement);
+    await nextFrame();
     syncSnapshotCanvas(instance);
     return instance;
   } catch (error) {
@@ -176,17 +268,21 @@ export async function prepareBackgroundImage(
   }
 
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return { image: null, errorMessage: STATIC_MESH_FALLBACK_ERROR };
+    return { image: null, errorMessage: null };
+  }
+
+  if (!checkWebgl2Support()) {
+    return { image: null, errorMessage: null };
   }
 
   try {
-    const instanceKey = getInstanceKey(size, cacheKey);
     const instance = await ensureStaticMeshInstance(size, cacheKey);
     const signature = getStaticMeshSignature(background.staticMeshGradient);
 
     if (signature !== instance.lastSignature) {
       instance.mount.setUniforms(buildStaticMeshUniforms(background.staticMeshGradient));
       instance.lastSignature = signature;
+      await nextFrame();
       syncSnapshotCanvas(instance);
     }
 
@@ -196,9 +292,16 @@ export async function prepareBackgroundImage(
     };
   } catch (error) {
     destroyInstance(getInstanceKey(size, cacheKey));
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('WebGL is not supported')) {
+      webgl2SupportChecked = true;
+      webgl2Supported = false;
+      return { image: null, errorMessage: null };
+    }
+
     console.error('Mesh Gradient failed:', error);
     return {
-      image: null,
+      image: createStaticMeshFallbackCanvas(size, background.staticMeshGradient, cacheKey),
       errorMessage: STATIC_MESH_FALLBACK_ERROR
     };
   }

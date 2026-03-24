@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     STATIC_MESH_GRADIENT_CONTROLS,
     STATIC_MESH_GRADIENT_MAX_COLORS,
@@ -11,6 +11,7 @@
   import MeshStylePreview from '$lib/components/MeshStylePreview.svelte';
   import { store } from '$lib/state.svelte';
   import { extractMediaMeshStyleCandidates } from '$lib/media-palette';
+  import { isStaticMeshGradientSupported } from '$lib/background-renderer';
   import { FRAMES, MODEL_NAMES } from '$lib/frames';
   import { SCALE_PRESETS, BG_PRESETS, EXPORT_SIZES } from '$lib/constants';
   import { Button } from '$lib/components/ui/button';
@@ -42,6 +43,7 @@
   let canScrollMediaLeft = $state(false);
   let canScrollMediaRight = $state(false);
   let meshColorDrafts = $state<string[]>([]);
+  let meshGradientSupported = $state(true);
 
   const currentColors = $derived(FRAMES[store.model]?.colors ?? []);
   const canAddMeshColor = $derived(
@@ -72,6 +74,20 @@
 
   $effect(() => {
     meshColorDrafts = [...store.staticMeshGradient.colors];
+  });
+
+  onMount(() => {
+    meshGradientSupported = isStaticMeshGradientSupported();
+    if (!meshGradientSupported && store.backgroundMode === 'staticMeshGradient') {
+      store.backgroundMode = 'solid';
+      store.setBackgroundError(null);
+    }
+  });
+
+  $effect(() => {
+    if (!meshGradientSupported && store.backgroundMode === 'staticMeshGradient') {
+      store.backgroundMode = 'solid';
+    }
   });
 
   $effect(() => {
@@ -395,11 +411,25 @@
       <Tabs.Root bind:value={store.backgroundMode}>
         <Tabs.List class="grid h-auto w-full grid-cols-2 gap-1 p-1">
           <Tabs.Trigger value="solid" class="px-2 py-2 text-xs">纯色</Tabs.Trigger>
-          <Tabs.Trigger value="staticMeshGradient" class="px-2 py-2 text-xs">Mesh Gradient</Tabs.Trigger>
+          {#if meshGradientSupported}
+            <Tabs.Trigger value="staticMeshGradient" class="px-2 py-2 text-xs">Mesh Gradient</Tabs.Trigger>
+          {:else}
+            <div
+              class="mesh-tab-disabled-wrap"
+              aria-label="Mesh Gradient 需要 WebGL2，当前环境不可用"
+            >
+              <Tabs.Trigger value="staticMeshGradient" class="px-2 py-2 text-xs" disabled>
+                Mesh Gradient
+              </Tabs.Trigger>
+              <span class="mesh-tab-popover" role="tooltip">
+                当前浏览器环境不支持 WebGL2，Mesh Gradient 已禁用。
+              </span>
+            </div>
+          {/if}
         </Tabs.List>
       </Tabs.Root>
 
-    {#if store.backgroundMode === 'solid'}
+    {#if store.backgroundMode === 'solid' || !meshGradientSupported}
       <div class="bg-row">
         {#each BG_PRESETS as bg}
           <button
@@ -424,6 +454,10 @@
             </Button>
           </div>
         </div>
+
+        {#if store.backgroundError}
+          <p class="mesh-error">{store.backgroundError}</p>
+        {/if}
 
         <div class="mesh-strip">
           <div class="mesh-strip-head">
@@ -656,9 +690,6 @@
           {/if}
         </div>
 
-        {#if store.backgroundError}
-          <p class="mesh-error">{store.backgroundError}</p>
-        {/if}
       </div>
     {/if}
   </section>
@@ -1340,6 +1371,55 @@
     width: 100%;
     accent-color: oklch(0.61 0.23 303);
     cursor: pointer;
+  }
+
+  .mesh-tab-disabled-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    outline: none;
+  }
+
+  .mesh-tab-disabled-wrap :global([data-slot='tabs-trigger']) {
+    width: 100%;
+  }
+
+  .mesh-tab-popover {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 8px);
+    transform: translateX(-50%) translateY(2px);
+    min-width: 210px;
+    max-width: 260px;
+    border-radius: 10px;
+    background: color-mix(in oklch, var(--foreground) 94%, black);
+    color: color-mix(in oklch, white 95%, var(--foreground));
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    text-align: center;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 20;
+  }
+
+  .mesh-tab-popover::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -4px;
+    width: 8px;
+    height: 8px;
+    background: inherit;
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  .mesh-tab-disabled-wrap:hover .mesh-tab-popover {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 
   .mesh-error {
