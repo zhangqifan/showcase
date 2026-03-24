@@ -82,6 +82,11 @@
       store.backgroundMode = 'solid';
       store.setBackgroundError(null);
     }
+
+    window.addEventListener('paste', onWindowPaste);
+    return () => {
+      window.removeEventListener('paste', onWindowPaste);
+    };
   });
 
   $effect(() => {
@@ -170,6 +175,27 @@
     if (input.files?.[0]) store.setContent(input.files[0]);
   }
 
+  function onWindowPaste(event: ClipboardEvent) {
+    const imageFile = getClipboardImageFile(event);
+    if (!imageFile) return;
+    event.preventDefault();
+    store.setContent(imageFile);
+  }
+
+  function getClipboardImageFile(event: ClipboardEvent): File | null {
+    const data = event.clipboardData;
+    if (!data) return null;
+
+    for (const item of data.items) {
+      if (!item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+
+    const fallback = Array.from(data.files).find((file) => file.type.startsWith('image/'));
+    return fallback ?? null;
+  }
+
   function onDrop(e: DragEvent) {
     e.preventDefault();
     dragOver = false;
@@ -241,6 +267,7 @@
   }
 
   function updateMeshValue(control: StaticMeshGradientControl, value: number) {
+    store.skipBackgroundTransitionOnce();
     store.staticMeshGradient[control.key] = clampControlValue(control, value);
   }
 
@@ -352,7 +379,7 @@
       >
         <input type="file" accept="image/*,video/*" onchange={onFileSelect} class="hidden" />
         <Upload class="size-6 text-muted-foreground" />
-        <span class="drop-text">拖拽或点击上传图片/视频</span>
+        <span class="drop-text">拖拽、点击上传，或 Cmd+V 粘贴图片</span>
       </label>
     {/if}
   </section>
@@ -437,11 +464,19 @@
             class="bg-chip {store.backgroundColor === bg.color ? 'active' : ''}"
             style="background-color: {bg.color}"
             title={bg.label}
-            onclick={() => (store.backgroundColor = bg.color)}
+            onclick={() => store.setBackgroundColor(bg.color)}
           ></button>
         {/each}
         <label class="bg-picker" title="自定义颜色">
-          <input type="color" bind:value={store.backgroundColor} class="color-input" />
+          <input
+            type="color"
+            value={store.backgroundColor}
+            class="color-input"
+            oninput={(event) =>
+              store.setBackgroundColor((event.currentTarget as HTMLInputElement).value, {
+                skipTransition: true
+              })}
+          />
         </label>
       </div>
     {:else}
@@ -619,8 +654,10 @@
                   type="color"
                   class="mesh-color-picker"
                   value={color}
-                  oninput={(event) =>
-                    updateMeshColor(index, (event.currentTarget as HTMLInputElement).value)}
+                  oninput={(event) => {
+                    store.skipBackgroundTransitionOnce();
+                    updateMeshColor(index, (event.currentTarget as HTMLInputElement).value);
+                  }}
                 />
                 <input
                   type="text"

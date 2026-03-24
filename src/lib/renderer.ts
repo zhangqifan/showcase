@@ -8,8 +8,53 @@ export interface RenderOptions {
   background: BackgroundRenderConfig;
 }
 
+export interface BackgroundTransitionOptions {
+  fromBackground: BackgroundRenderConfig;
+  fromBackgroundImage?: CanvasImageSource | null;
+  progress: number;
+  toZoomFrom?: number;
+  toZoomTo?: number;
+}
+
 /** Base fill: at scale 1.0 the phone height = 85% of canvas */
 const BASE_FILL = 0.85;
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function lerp(start: number, end: number, t: number): number {
+  return start + (end - start) * t;
+}
+
+function drawBackgroundLayer(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  background: BackgroundRenderConfig,
+  backgroundImage: CanvasImageSource | null,
+  alpha = 1,
+  scale = 1
+) {
+  if (alpha <= 0) return;
+
+  const drawSize = size * scale;
+  const drawX = (size - drawSize) / 2;
+  const drawY = (size - drawSize) / 2;
+
+  ctx.save();
+  if (alpha < 1) {
+    ctx.globalAlpha *= alpha;
+  }
+
+  if (background.mode === 'staticMeshGradient' && backgroundImage) {
+    ctx.drawImage(backgroundImage, drawX, drawY, drawSize, drawSize);
+  } else if (background.solidColor !== "transparent") {
+    ctx.fillStyle = background.solidColor;
+    ctx.fillRect(drawX, drawY, drawSize, drawSize);
+  }
+
+  ctx.restore();
+}
 
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -39,7 +84,8 @@ export function render(
   frameConfig: FrameModel,
   content: HTMLImageElement | HTMLVideoElement | null,
   options: RenderOptions,
-  backgroundImage: CanvasImageSource | null = null
+  backgroundImage: CanvasImageSource | null = null,
+  backgroundTransition: BackgroundTransitionOptions | null = null
 ) {
   const {
     frameScale,
@@ -50,11 +96,20 @@ export function render(
 
   // 1. Clear and fill background
   ctx.clearRect(0, 0, size, size);
-  if (background.mode === 'staticMeshGradient' && backgroundImage) {
-    ctx.drawImage(backgroundImage, 0, 0, size, size);
-  } else if (background.solidColor !== "transparent") {
-    ctx.fillStyle = background.solidColor;
-    ctx.fillRect(0, 0, size, size);
+  if (backgroundTransition) {
+    const progress = clamp01(backgroundTransition.progress);
+    const toZoom = lerp(backgroundTransition.toZoomFrom ?? 1.02, backgroundTransition.toZoomTo ?? 1, progress);
+    drawBackgroundLayer(
+      ctx,
+      size,
+      backgroundTransition.fromBackground,
+      backgroundTransition.fromBackgroundImage ?? null,
+      1 - progress,
+      1
+    );
+    drawBackgroundLayer(ctx, size, background, backgroundImage, progress, toZoom);
+  } else {
+    drawBackgroundLayer(ctx, size, background, backgroundImage, 1, 1);
   }
 
   if (!frameImage) return;

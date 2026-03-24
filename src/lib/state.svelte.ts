@@ -18,6 +18,7 @@ class AppStore {
   contentType = $state<"image" | "video" | null>(null);
   backgroundMode = $state<BackgroundMode>('solid');
   backgroundColor = $state("#ffffff");
+  private skipNextBackgroundTransition = $state(false);
   staticMeshGradient = $state(cloneStaticMeshGradientConfig());
   backgroundError = $state('');
   mediaMeshStyleCandidates = $state<MediaMeshStyleCandidate[]>([]);
@@ -100,6 +101,21 @@ class AppStore {
 
   setBackgroundError(message: string | null) {
     this.backgroundError = message ?? '';
+  }
+
+  setBackgroundColor(color: string, options?: { skipTransition?: boolean }) {
+    this.backgroundColor = color;
+    this.skipNextBackgroundTransition = options?.skipTransition ?? false;
+  }
+
+  skipBackgroundTransitionOnce() {
+    this.skipNextBackgroundTransition = true;
+  }
+
+  consumeBackgroundTransitionSkip(): boolean {
+    const shouldSkip = this.skipNextBackgroundTransition;
+    this.skipNextBackgroundTransition = false;
+    return shouldSkip;
   }
 
   resetPosition() {
