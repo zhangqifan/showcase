@@ -1,3 +1,4 @@
+import { prepareBackgroundImage } from '$lib/background-renderer';
 import { render } from '$lib/renderer';
 import { store } from '$lib/state.svelte';
 import { FRAMES } from '$lib/frames';
@@ -93,7 +94,9 @@ export async function exportImage(
   c.height = resolution;
   const cx = c.getContext('2d')!;
   const opts = getExportRenderOptions(resolution);
-  render(cx, resolution, ctx.frameImage, fc, ctx.contentElement, opts);
+  const background = await prepareBackgroundImage(opts.background, resolution);
+  store.setBackgroundError(background.errorMessage);
+  render(cx, resolution, ctx.frameImage, fc, ctx.contentElement, opts, background.image);
   const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
   if (blob) downloadBlob(blob, `showcase-${resolution}x${resolution}.png`);
 }
@@ -124,6 +127,8 @@ export async function exportVideoMP4(
   }
 
   const opts = getExportRenderOptions(exportResolution);
+  const background = await prepareBackgroundImage(opts.background, exportResolution);
+  store.setBackgroundError(background.errorMessage);
   const oc = document.createElement('canvas');
   oc.width = exportResolution;
   oc.height = exportResolution;
@@ -178,7 +183,7 @@ export async function exportVideoMP4(
 
   vid.currentTime = 0;
   await new Promise((r) => setTimeout(r, 0));
-  render(ox, exportResolution, ctx.frameImage, fc, vid, opts);
+  render(ox, exportResolution, ctx.frameImage, fc, vid, opts, background.image);
   await videoSource.add(0, 1 / FPS);
 
   vid.currentTime = 0;
@@ -191,7 +196,7 @@ export async function exportVideoMP4(
     async function captureFrame(mediaTimeSec: number) {
       if (mediaTimeSec <= lastT) return;
       lastT = mediaTimeSec;
-      render(ox, exportResolution, ctx.frameImage, fc, vid, opts);
+      render(ox, exportResolution, ctx.frameImage, fc, vid, opts, background.image);
       await videoSource.add(mediaTimeSec, 1 / FPS);
       store.exportProgress = Math.min(mediaTimeSec / duration, 0.99);
     }
