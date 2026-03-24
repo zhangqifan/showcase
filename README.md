@@ -7,6 +7,7 @@ A web app for creating device mockups and app screenshots. Upload screenshots, c
 - [SvelteKit](https://kit.svelte.dev/) with [Vite](https://vitejs.dev/)
 - [Tailwind CSS v4](https://tailwindcss.com/)
 - [mediabunny](https://github.com/mediabunny/mediabunny) for image handling
+- [@paper-design/shaders](https://github.com/paper-design/shaders) for Static Mesh Gradient rendering
 
 ## Getting Started
 
@@ -24,6 +25,16 @@ Open [http://localhost:5173](http://localhost:5173).
 | `npm run dev`     | Start dev server     |
 | `npm run build`   | Build for production |
 | `npm run preview` | Preview production   |
+
+## Third-Party Notice
+
+This project uses [`@paper-design/shaders`](https://github.com/paper-design/shaders) for Static Mesh Gradient rendering.
+
+- License: PolyForm Shield
+- Source: https://github.com/paper-design/shaders
+- Required Notice: Copyright Lost Coast Labs, Inc. (http://paper.design)
+
+Please review the Paper Shaders license before redistributing or using this project in a product that may compete with Paper or Paper Shaders.
 
 ## License
 
