@@ -25,9 +25,11 @@
   const BACKGROUND_DURATION_MS = 260;
   const BACKGROUND_ZOOM_FROM = 1.02;
   const EPSILON = 0.0001;
+  const UPLOAD_TAP_DISTANCE_THRESHOLD = 6;
 
   let containerEl: HTMLDivElement;
   let canvas: HTMLCanvasElement;
+  let uploadInputEl: HTMLInputElement | null = null;
   let ctx = $state<CanvasRenderingContext2D | null>(null);
   let frameImage = $state<HTMLImageElement | null>(null);
   let contentElement = $state<HTMLImageElement | HTMLVideoElement | null>(null);
@@ -524,6 +526,14 @@
     }
   }
 
+  function onFileSelect(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    store.setContent(file);
+    input.value = '';
+  }
+
   // ====================== Export ======================
 
   async function handleExport(resolution: number, format: 'png' | 'mp4') {
@@ -576,6 +586,23 @@
 
   function onPointerUp(e: PointerEvent) {
     if (!isDragging) return;
+    const movedX = e.clientX - dragStartX;
+    const movedY = e.clientY - dragStartY;
+    const movedDistance = Math.hypot(movedX, movedY);
+    const shouldOpenUpload = !store.contentUrl && movedDistance <= UPLOAD_TAP_DISTANCE_THRESHOLD;
+    isDragging = false;
+    if (canvas.hasPointerCapture(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
+    canvas.style.cursor = 'grab';
+    requestRender();
+    if (shouldOpenUpload) {
+      uploadInputEl?.click();
+    }
+  }
+
+  function onPointerCancel(e: PointerEvent) {
+    if (!isDragging) return;
     isDragging = false;
     if (canvas.hasPointerCapture(e.pointerId)) {
       canvas.releasePointerCapture(e.pointerId);
@@ -607,12 +634,21 @@
   ondragover={handleDragOver}
 >
   <div class="canvas-wrapper" style="width:{wrapperSize}px;height:{wrapperSize}px">
+    <input
+      bind:this={uploadInputEl}
+      type="file"
+      accept="image/*,video/*"
+      onchange={onFileSelect}
+      class="upload-input"
+      aria-label="上传图片或视频"
+      tabindex="-1"
+    />
     <canvas
       bind:this={canvas}
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}
-      onpointercancel={onPointerUp}
+      onpointercancel={onPointerCancel}
     ></canvas>
   </div>
 </div>
@@ -639,6 +675,9 @@
     display: block;
     cursor: grab;
     touch-action: none;
+  }
+  .upload-input {
+    display: none;
   }
   canvas:active { cursor: grabbing; }
 </style>
