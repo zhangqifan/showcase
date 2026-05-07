@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    if [[ "$SOURCE" != /* ]]; then
+        SOURCE="$SOURCE_DIR/$SOURCE"
+    fi
+done
+
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+GENERATE_SCRIPT="$SCRIPT_DIR/generate.sh"
+
+open_workspace=true
+args=()
+
+for arg in "$@"; do
+    if [[ "$arg" == "--no-open" ]]; then
+        open_workspace=false
+    else
+        args+=("$arg")
+    fi
+done
+
+if [[ "$open_workspace" == true ]]; then
+    if [[ "${#args[@]}" -gt 0 ]]; then
+        "$GENERATE_SCRIPT" --open "${args[@]}"
+    else
+        "$GENERATE_SCRIPT" --open
+    fi
+else
+    if [[ "${#args[@]}" -gt 0 ]]; then
+        "$GENERATE_SCRIPT" --no-open "${args[@]}"
+    else
+        "$GENERATE_SCRIPT" --no-open
+    fi
+fi

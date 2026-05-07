@@ -1,9 +1,14 @@
-# Dependencies
-node_modules/
+# Web dependencies
+web/node_modules/
 
-# Build output
-.svelte-kit/
-build/
+# Web build output
+web/.svelte-kit/
+web/build/
+web/.vite/
+
+# Apple generated projects
+apple/*.xcodeproj/
+apple/*.xcworkspace/
 
 # Environment
 .env
@@ -13,6 +18,8 @@ build/
 # IDE
 .idea/
 .vscode/
+xcuserdata/
+DerivedData/
 *.swp
 *.swo
 
