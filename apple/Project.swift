@@ -18,8 +18,8 @@ let project = Project(
             destinations: .macOS,
             product: .app,
             productName: "Showcase",
-            bundleId: "com.shuhari.showcase.mac",
-            deploymentTargets: .macOS("14.0"),
+            bundleId: "app.shuhari.showcase.mac",
+            deploymentTargets: .macOS("26.0"),
             infoPlist: "Sources/Mac/Info.plist",
             sources: "Sources/Mac/**",
             settings: .settings(
@@ -33,8 +33,8 @@ let project = Project(
             destinations: .iOS,
             product: .app,
             productName: "Showcase",
-            bundleId: "com.shuhari.showcase.ios",
-            deploymentTargets: .iOS("17.0"),
+            bundleId: "app.shuhari.showcase.ios",
+            deploymentTargets: .iOS("26.0"),
             infoPlist: "Sources/iOS/Info.plist",
             sources: "Sources/iOS/**"
         ),
