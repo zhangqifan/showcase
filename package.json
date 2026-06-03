@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "node scripts/run-vite.mjs dev",
+    "build": "node scripts/run-vite.mjs build",
+    "preview": "node scripts/run-vite.mjs preview"
   },
   "devDependencies": {
     "@internationalized/date": "^3.11.0",
