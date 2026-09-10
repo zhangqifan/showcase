@@ -567,6 +567,7 @@
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
+    store.beginHistoryGroup();
     isDragging = true;
     transformAnimationActive = false;
     dragStartX = e.clientX;
@@ -599,6 +600,7 @@
     const movedDistance = Math.hypot(movedX, movedY);
     const shouldOpenUpload = !store.contentUrl && movedDistance <= UPLOAD_TAP_DISTANCE_THRESHOLD;
     isDragging = false;
+    store.endHistoryGroup();
     if (canvas.hasPointerCapture(e.pointerId)) {
       canvas.releasePointerCapture(e.pointerId);
     }
@@ -612,6 +614,7 @@
   function onPointerCancel(e: PointerEvent) {
     if (!isDragging) return;
     isDragging = false;
+    store.endHistoryGroup();
     if (canvas.hasPointerCapture(e.pointerId)) {
       canvas.releasePointerCapture(e.pointerId);
     }
@@ -657,6 +660,7 @@
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}
       onpointercancel={onPointerCancel}
+      onlostpointercapture={onPointerCancel}
     ></canvas>
   </div>
 </div>

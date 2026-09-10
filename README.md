@@ -2,6 +2,8 @@
 
 A web app for creating device mockups and app screenshots. Upload screenshots, choose device frames (e.g. iPhone 17), switch iPhone Duo between inner and outer displays in portrait or landscape, adjust layout and background, then export in high resolution (1080×1080 or 1920×1920).
 
+Use **Cmd+Z** to undo and **Cmd+Shift+Z** to redo (or **Ctrl+Z / Ctrl+Shift+Z** on Windows and Linux). History keeps up to 100 edits for the current page session, including media changes. Each drag or slider gesture counts as one edit; text fields retain their native undo behavior.
+
 ## Stack
 
 - [SvelteKit](https://kit.svelte.dev/) with [Vite](https://vitejs.dev/)
@@ -23,7 +25,7 @@ Open [http://localhost:5173](http://localhost:5173).
 | Command   | Description          |
 | --------- | -------------------- |
 | `npm run dev`     | Start dev server     |
-| `npm test`      | Run renderer regression tests |
+| `npm test`      | Run renderer and editing history regression tests |
 | `npm run build`   | Build for production |
 | `npm run preview` | Preview production   |
 

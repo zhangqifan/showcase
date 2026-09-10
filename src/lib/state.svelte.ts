@@ -10,9 +10,24 @@ import {
 } from '$lib/background';
 import { CANVAS_SIZE } from '$lib/constants';
 import { getFrame } from '$lib/frames';
+import { SnapshotHistory } from '$lib/history';
 import type { MediaMeshStyleCandidate } from '$lib/media-palette';
 
-class AppStore {
+interface EditorSnapshot {
+  model: string;
+  color: string;
+  frameVariant: string;
+  contentUrl: string;
+  contentType: 'image' | 'video' | null;
+  backgroundMode: BackgroundMode;
+  backgroundColor: string;
+  staticMeshGradient: StaticMeshGradientConfig;
+  frameScale: number;
+  frameOffsetX: number;
+  frameOffsetY: number;
+}
+
+export class AppStore {
   model = $state("iPhone 17 Pro");
   color = $state("Silver");
   frameVariant = $state("inner-open-landscape");
@@ -35,6 +50,74 @@ class AppStore {
   /** -1 = idle, 0‒1 = video export progress */
   exportProgress = $state(-1);
 
+  private history = new SnapshotHistory(this.getSnapshot());
+  private contentUrls = new Set<string>();
+
+  getSnapshot(): EditorSnapshot {
+    return {
+      model: this.model,
+      color: this.color,
+      frameVariant: this.frameVariant,
+      contentUrl: this.contentUrl,
+      contentType: this.contentType,
+      backgroundMode: this.backgroundMode,
+      backgroundColor: this.backgroundColor,
+      staticMeshGradient: cloneStaticMeshGradientConfig(this.staticMeshGradient),
+      frameScale: this.frameScale,
+      frameOffsetX: this.frameOffsetX,
+      frameOffsetY: this.frameOffsetY
+    };
+  }
+
+  recordHistory(snapshot = this.getSnapshot()) {
+    this.history.record(snapshot);
+    this.releaseUnusedContentUrls();
+  }
+
+  beginHistoryGroup() {
+    this.history.begin(this.getSnapshot());
+  }
+
+  endHistoryGroup() {
+    this.history.end(this.getSnapshot());
+    this.releaseUnusedContentUrls();
+  }
+
+  undo() {
+    const snapshot = this.history.undo(this.getSnapshot());
+    if (snapshot) this.restoreSnapshot(snapshot);
+    this.releaseUnusedContentUrls();
+    return snapshot !== null;
+  }
+
+  redo() {
+    const snapshot = this.history.redo(this.getSnapshot());
+    if (snapshot) this.restoreSnapshot(snapshot);
+    this.releaseUnusedContentUrls();
+    return snapshot !== null;
+  }
+
+  clearHistory() {
+    this.history.reset(this.getSnapshot());
+    this.releaseUnusedContentUrls();
+  }
+
+  private restoreSnapshot(snapshot: EditorSnapshot) {
+    Object.assign(this, snapshot);
+    this.skipBackgroundTransitionOnce();
+  }
+
+  private releaseUnusedContentUrls() {
+    if (this.contentUrls.size === 0) return;
+    const retained = new Set(this.history.snapshots.map((snapshot) => snapshot.contentUrl));
+    retained.add(this.contentUrl);
+    for (const url of this.contentUrls) {
+      if (retained.has(url)) continue;
+      URL.revokeObjectURL(url);
+      this.contentUrls.delete(url);
+    }
+  }
+
   setModel(model: string) {
     this.model = model;
     this.normalizeFrameColor();
@@ -53,13 +136,12 @@ class AppStore {
   }
 
   setContent(file: File) {
-    if (this.contentUrl) URL.revokeObjectURL(this.contentUrl);
     this.contentUrl = URL.createObjectURL(file);
+    this.contentUrls.add(this.contentUrl);
     this.contentType = file.type.startsWith('video/') ? 'video' : 'image';
   }
 
   clearContent() {
-    if (this.contentUrl) URL.revokeObjectURL(this.contentUrl);
     this.contentUrl = '';
     this.contentType = null;
   }
