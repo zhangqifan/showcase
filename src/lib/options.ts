@@ -11,25 +11,13 @@ export function getBackgroundRenderConfig() {
   );
 }
 
-/** 从 store 构建渲染选项 */
-export function getRenderOptions(): RenderOptions {
-  return {
-    frameScale: store.frameScale,
-    frameOffsetX: store.frameOffsetX,
-    frameOffsetY: store.frameOffsetY,
-    background: getBackgroundRenderConfig()
-  };
-}
-
 /** 构建导出用的渲染选项（offset 按目标分辨率缩放） */
 export function getExportRenderOptions(resolution: number): RenderOptions {
-  const { x, y } = store.scaleOffsetForExport(resolution);
+  const scale = resolution / CANVAS_SIZE;
   return {
     frameScale: store.frameScale,
-    frameOffsetX: x,
-    frameOffsetY: y,
+    frameOffsetX: store.frameOffsetX * scale,
+    frameOffsetY: store.frameOffsetY * scale,
     background: getBackgroundRenderConfig()
   };
 }
-
-export { CANVAS_SIZE };

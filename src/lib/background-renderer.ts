@@ -21,7 +21,6 @@ export interface BackgroundRenderResult {
 const staticMeshInstances = new Map<string, StaticMeshInstance>();
 const staticMeshFallbackCache = new Map<string, HTMLCanvasElement>();
 const STATIC_MESH_FALLBACK_ERROR = 'Mesh Gradient 渲染失败，已使用简化预览。';
-const STATIC_MESH_WEBGL_FALLBACK_ERROR = '当前环境不支持 WebGL2，已使用简化 Mesh Gradient 预览。';
 
 let webgl2SupportChecked = false;
 let webgl2Supported = false;

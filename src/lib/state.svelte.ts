@@ -8,7 +8,6 @@ import {
   type StaticMeshGradientConfig,
   type StaticMeshGradientPreset
 } from '$lib/background';
-import { CANVAS_SIZE } from '$lib/constants';
 import { getFrame } from '$lib/frames';
 import { SnapshotHistory } from '$lib/history';
 import type { MediaMeshStyleCandidate } from '$lib/media-palette';
@@ -146,10 +145,6 @@ export class AppStore {
     this.contentType = null;
   }
 
-  resetStaticMeshGradient() {
-    this.staticMeshGradient = cloneStaticMeshGradientConfig();
-  }
-
   applyStaticMeshGradientPreset(preset: StaticMeshGradientPreset | StaticMeshGradientConfig) {
     const config = 'config' in preset ? preset.config : preset;
     this.staticMeshGradient = cloneStaticMeshGradientConfig(config);
@@ -170,11 +165,6 @@ export class AppStore {
   removeStaticMeshGradientColor(index: number) {
     if (this.staticMeshGradient.colors.length <= STATIC_MESH_GRADIENT_MIN_COLORS) return;
     this.staticMeshGradient.colors = this.staticMeshGradient.colors.filter((_, colorIndex) => colorIndex !== index);
-  }
-
-  applyMediaMeshStyle(candidate: MediaMeshStyleCandidate | StaticMeshGradientConfig) {
-    const config = 'config' in candidate ? candidate.config : candidate;
-    this.staticMeshGradient = cloneStaticMeshGradientConfig(config);
   }
 
   setMediaMeshStyleCandidates(candidates: MediaMeshStyleCandidate[]) {
@@ -230,12 +220,6 @@ export class AppStore {
 
   centerVertically() {
     this.frameOffsetY = 0;
-  }
-
-  /** 将 canvas 坐标的 offset 缩放到目标分辨率 */
-  scaleOffsetForExport(resolution: number) {
-    const s = resolution / CANVAS_SIZE;
-    return { x: this.frameOffsetX * s, y: this.frameOffsetY * s };
   }
 }
 

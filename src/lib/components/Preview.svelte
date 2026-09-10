@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { BackgroundRenderConfig } from '$lib/background';
   import { prepareBackgroundImage } from '$lib/background-renderer';
   import { store } from '$lib/state.svelte';
@@ -53,7 +53,6 @@
   let rafId = 0;
   let needsRender = false;
   let wrapperSize = $state(400);
-  let resizeObserver: ResizeObserver | null = null;
 
   let transformAnimationActive = false;
   let transformAnimationStart = 0;
@@ -70,7 +69,6 @@
 
   let backgroundAnimationActive = false;
   let backgroundAnimationStart = 0;
-  let backgroundRequestToken = 0;
 
   let isDragging = false;
   let dragStartX = 0;
@@ -84,9 +82,9 @@
     canvas.width = CANVAS_SIZE;
     canvas.height = CANVAS_SIZE;
     ctx = canvas.getContext('2d');
-    store.exportFn = (res, fmt) => handleExport(res, fmt);
+    store.exportFn = handleExport;
     updateWrapperSize();
-    resizeObserver = new ResizeObserver(updateWrapperSize);
+    const resizeObserver = new ResizeObserver(updateWrapperSize);
     resizeObserver.observe(containerEl);
 
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -95,32 +93,26 @@
     const onMotionChange = (event: MediaQueryListEvent) => {
       syncReducedMotionPreference(event.matches);
     };
-    const onLegacyMotionChange = (event: MediaQueryListEvent) => {
-      syncReducedMotionPreference(event.matches);
-    };
 
     if (typeof mediaQuery.addEventListener === 'function') {
       mediaQuery.addEventListener('change', onMotionChange);
     } else if (typeof mediaQuery.addListener === 'function') {
-      mediaQuery.addListener(onLegacyMotionChange);
+      mediaQuery.addListener(onMotionChange);
     }
     requestRender();
 
     return () => {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      cleanupVideo();
+      resizeObserver.disconnect();
+      store.exportFn = null;
       if (typeof mediaQuery.removeEventListener === 'function') {
         mediaQuery.removeEventListener('change', onMotionChange);
       } else if (typeof mediaQuery.removeListener === 'function') {
-        mediaQuery.removeListener(onLegacyMotionChange);
+        mediaQuery.removeListener(onMotionChange);
       }
     };
-  });
-
-  onDestroy(() => {
-    cancelAnimationFrame(rafId);
-    rafId = 0;
-    cleanupVideo();
-    resizeObserver?.disconnect();
-    store.exportFn = null;
   });
 
   function updateWrapperSize() {
@@ -253,25 +245,7 @@
     store.setBackgroundError(errorMessage);
 
     const current = currentBackgroundLayer;
-    if (!current) {
-      currentBackgroundLayer = layer;
-      previousBackgroundLayer = null;
-      backgroundTransitionProgress = 1;
-      backgroundAnimationActive = false;
-      requestRender();
-      return;
-    }
-
-    if (current.key === layer.key) {
-      currentBackgroundLayer = layer;
-      previousBackgroundLayer = null;
-      backgroundTransitionProgress = 1;
-      backgroundAnimationActive = false;
-      requestRender();
-      return;
-    }
-
-    if (prefersReducedMotion || !shouldAnimate) {
+    if (!current || current.key === layer.key || prefersReducedMotion || !shouldAnimate) {
       currentBackgroundLayer = layer;
       previousBackgroundLayer = null;
       backgroundTransitionProgress = 1;
@@ -474,7 +448,6 @@
     const background = getBackgroundRenderConfig();
     const shouldAnimate = untrack(() => !store.consumeBackgroundTransitionSkip());
     const key = getBackgroundLayerKey(background);
-    const requestToken = ++backgroundRequestToken;
     const transitionSnapshot = untrack(() => {
       return currentBackgroundLayer && currentBackgroundLayer.key !== key
         ? cloneBackgroundLayer(currentBackgroundLayer)
@@ -498,7 +471,7 @@
 
     void prepareBackgroundImage(background, CANVAS_SIZE)
       .then((result) => {
-        if (!active || requestToken !== backgroundRequestToken) return;
+        if (!active) return;
         applyBackgroundLayer(
           { key, config: background, image: result.image },
           result.errorMessage,
@@ -507,7 +480,7 @@
         );
       })
       .catch((error: unknown) => {
-        if (!active || requestToken !== backgroundRequestToken) return;
+        if (!active) return;
         console.error('Background render failed:', error);
         applyBackgroundLayer(
           { key, config: background, image: null },
@@ -599,19 +572,13 @@
     const movedY = e.clientY - dragStartY;
     const movedDistance = Math.hypot(movedX, movedY);
     const shouldOpenUpload = !store.contentUrl && movedDistance <= UPLOAD_TAP_DISTANCE_THRESHOLD;
-    isDragging = false;
-    store.endHistoryGroup();
-    if (canvas.hasPointerCapture(e.pointerId)) {
-      canvas.releasePointerCapture(e.pointerId);
-    }
-    canvas.style.cursor = 'grab';
-    requestRender();
+    finishDrag(e);
     if (shouldOpenUpload) {
       uploadInputEl?.click();
     }
   }
 
-  function onPointerCancel(e: PointerEvent) {
+  function finishDrag(e: PointerEvent) {
     if (!isDragging) return;
     isDragging = false;
     store.endHistoryGroup();
@@ -659,8 +626,8 @@
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}
-      onpointercancel={onPointerCancel}
-      onlostpointercapture={onPointerCancel}
+      onpointercancel={finishDrag}
+      onlostpointercapture={finishDrag}
     ></canvas>
   </div>
 </div>
