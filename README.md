@@ -25,7 +25,7 @@ Open [http://localhost:5173](http://localhost:5173).
 | Command   | Description          |
 | --------- | -------------------- |
 | `npm run dev`     | Start dev server     |
-| `npm test`      | Run renderer and editing history regression tests |
+| `npm test`      | Run renderer, editing history, and video capture regression tests |
 | `npm run build`   | Build for production |
 | `npm run preview` | Preview production   |
 

@@ -3,6 +3,7 @@ import { render } from '$lib/renderer';
 import { store } from '$lib/state.svelte';
 import type { FrameModel } from '$lib/frames';
 import { getExportRenderOptions } from '$lib/options';
+import { captureVideoFrames } from '$lib/video-capture';
 
 let mediabunnyPromise: Promise<typeof import('mediabunny')> | null = null;
 
@@ -138,116 +139,91 @@ export async function exportVideoMP4(
   vid.playsInline = true;
   vid.muted = true;
   vid.preload = 'auto';
-  await new Promise<void>((ok, fail) => {
-    vid.oncanplaythrough = () => ok();
-    vid.onerror = () => fail(new Error('无法加载视频'));
-    vid.load();
-  });
-
-  const duration = vid.duration;
-
-  let audioBuffer: AudioBuffer | null = null;
   try {
-    const ab = await (await fetch(store.contentUrl)).arrayBuffer();
-    audioBuffer = await new OfflineAudioContext(2, 1, 48000).decodeAudioData(ab);
-  } catch { /* no audio */ }
+    await new Promise<void>((ok, fail) => {
+      vid.oncanplaythrough = () => ok();
+      vid.onerror = () => fail(new Error('无法加载视频'));
+      vid.load();
+    });
 
-  const target = new BufferTarget();
-  const output = new Output({
-    format: new Mp4OutputFormat(),
-    target
-  });
+    const duration = vid.duration;
 
-  const videoSource = new CanvasSource(oc, {
-    codec: 'avc',
-    bitrate: selectedConfig.bitrate,
-    hardwareAcceleration: selectedConfig.hardwareAcceleration
-  });
-  output.addVideoTrack(videoSource, { frameRate: FPS });
-
-  let audioSource: InstanceType<typeof AudioBufferSource> | null = null;
-  if (audioBuffer) {
-    audioSource = new AudioBufferSource({ codec: 'aac', bitrate: 192_000 });
-    output.addAudioTrack(audioSource);
-  }
-
-  try {
-    await output.start();
-  } catch (e) {
-    alert('编码器初始化失败: ' + e);
-    return;
-  }
-
-  store.exportProgress = 0;
-
-  vid.currentTime = 0;
-  await new Promise((r) => setTimeout(r, 0));
-  render(ox, exportResolution, ctx.frameImage, fc, vid, opts, background.image);
-  await videoSource.add(0, 1 / FPS);
-
-  vid.currentTime = 0;
-  await vid.play();
-
-  type VideoFrameCallback = (now: number, meta: { mediaTime: number }) => void;
-  type VideoWithRVFC = HTMLVideoElement & {
-    requestVideoFrameCallback?: (callback: VideoFrameCallback) => number;
-  };
-  const vidWithRVFC = vid as VideoWithRVFC;
-  const useRVFC = typeof vidWithRVFC.requestVideoFrameCallback === 'function';
-  await new Promise<void>((resolve) => {
-    let lastT = -1;
-
-    async function captureFrame(mediaTimeSec: number) {
-      if (mediaTimeSec <= lastT) return;
-      lastT = mediaTimeSec;
-      render(ox, exportResolution, ctx.frameImage, fc, vid, opts, background.image);
-      await videoSource.add(mediaTimeSec, 1 / FPS);
-      store.exportProgress = Math.min(mediaTimeSec / duration, 0.99);
-    }
-
-    if (useRVFC) {
-      function onRVFC(_now: number, meta: { mediaTime: number }) {
-        captureFrame(meta.mediaTime).then(() => {
-          if (!vid.ended && !vid.paused && vidWithRVFC.requestVideoFrameCallback) {
-            vidWithRVFC.requestVideoFrameCallback(onRVFC);
-          }
-        });
-      }
-      vidWithRVFC.requestVideoFrameCallback?.(onRVFC);
-    } else {
-      const ivl = setInterval(() => {
-        if (vid.ended || vid.paused) {
-          clearInterval(ivl);
-          return;
-        }
-        captureFrame(vid.currentTime);
-      }, 1000 / FPS);
-      vid.addEventListener('ended', () => clearInterval(ivl), { once: true });
-    }
-
-    vid.addEventListener('ended', () => {
-      store.exportProgress = 0.99;
-      resolve();
-    }, { once: true });
-  });
-
-  videoSource.close();
-
-  if (audioBuffer && audioSource) {
+    let audioBuffer: AudioBuffer | null = null;
     try {
-      await audioSource.add(audioBuffer);
-    } catch { /* skip */ }
-    audioSource.close();
+      const ab = await (await fetch(store.contentUrl)).arrayBuffer();
+      audioBuffer = await new OfflineAudioContext(2, 1, 48000).decodeAudioData(ab);
+    } catch { /* no audio */ }
+
+    const target = new BufferTarget();
+    const output = new Output({
+      format: new Mp4OutputFormat(),
+      target
+    });
+
+    const videoSource = new CanvasSource(oc, {
+      codec: 'avc',
+      bitrate: selectedConfig.bitrate,
+      hardwareAcceleration: selectedConfig.hardwareAcceleration
+    });
+    output.addVideoTrack(videoSource, { frameRate: FPS });
+
+    let audioSource: InstanceType<typeof AudioBufferSource> | null = null;
+    if (audioBuffer) {
+      audioSource = new AudioBufferSource({ codec: 'aac', bitrate: 192_000 });
+      output.addAudioTrack(audioSource);
+    }
+
+    let outputStarted = false;
+    let videoSourceClosed = false;
+    try {
+      try {
+        await output.start();
+        outputStarted = true;
+      } catch (e) {
+        alert('编码器初始化失败: ' + e);
+        return;
+      }
+
+      store.exportProgress = 0;
+      vid.currentTime = 0;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await captureVideoFrames(vid, {
+        fps: FPS,
+        writeFrame: async (timestamp) => {
+          render(ox, exportResolution, ctx.frameImage, fc, vid, opts, background.image);
+          await videoSource.add(timestamp, 1 / FPS);
+        },
+        onFrameWritten: (timestamp) => {
+          store.exportProgress = Math.min(timestamp / duration, 0.99);
+        }
+      });
+      store.exportProgress = 0.99;
+
+      videoSource.close();
+      videoSourceClosed = true;
+
+      if (audioBuffer && audioSource) {
+        try {
+          await audioSource.add(audioBuffer);
+        } catch { /* skip */ }
+        audioSource.close();
+      }
+
+      await output.finalize();
+
+      store.exportProgress = 1;
+      const blob = new Blob([target.buffer!], { type: 'video/mp4' });
+      downloadBlob(blob, `showcase-${exportResolution}x${exportResolution}.mp4`);
+    } finally {
+      if (outputStarted && !videoSourceClosed) {
+        try { videoSource.close(); } catch { /* best-effort encoder cleanup */ }
+      }
+    }
+  } finally {
+    store.exportProgress = -1;
+    vid.pause();
+    vid.removeAttribute('src');
+    vid.load();
   }
-
-  await output.finalize();
-
-  store.exportProgress = 1;
-  const blob = new Blob([target.buffer!], { type: 'video/mp4' });
-  downloadBlob(blob, `showcase-${exportResolution}x${exportResolution}.mp4`);
-
-  store.exportProgress = -1;
-  vid.pause();
-  vid.removeAttribute('src');
-  vid.load();
 }
