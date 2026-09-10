@@ -16,8 +16,10 @@ export interface BackgroundTransitionOptions {
   toZoomTo?: number;
 }
 
-/** Base fill: at scale 1.0 the phone height = 85% of canvas */
+/** Base fill: at scale 1.0 the frame's longest dimension = 85% of canvas */
 const BASE_FILL = 0.85;
+
+type CornerRadii = [number, number, number, number];
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -62,18 +64,23 @@ function drawRoundedRect(
   y: number,
   w: number,
   h: number,
-  r: number,
+  radius: number | CornerRadii,
 ) {
+  const [topLeft, topRight, bottomRight, bottomLeft] =
+    typeof radius === "number"
+      ? [radius, radius, radius, radius]
+      : radius;
+
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.arcTo(x + w, y, x + w, y + r, r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-  ctx.lineTo(x + r, y + h);
-  ctx.arcTo(x, y + h, x, y + h - r, r);
-  ctx.lineTo(x, y + r);
-  ctx.arcTo(x, y, x + r, y, r);
+  ctx.moveTo(x + topLeft, y);
+  ctx.lineTo(x + w - topRight, y);
+  ctx.arcTo(x + w, y, x + w, y + topRight, topRight);
+  ctx.lineTo(x + w, y + h - bottomRight);
+  ctx.arcTo(x + w, y + h, x + w - bottomRight, y + h, bottomRight);
+  ctx.lineTo(x + bottomLeft, y + h);
+  ctx.arcTo(x, y + h, x, y + h - bottomLeft, bottomLeft);
+  ctx.lineTo(x, y + topLeft);
+  ctx.arcTo(x, y, x + topLeft, y, topLeft);
   ctx.closePath();
 }
 
@@ -116,27 +123,29 @@ export function render(
 
   // 2. Calculate phone size using base fit * multiplier
   const effectiveScale = BASE_FILL * frameScale;
-  const frameAspect = frameConfig.width / frameConfig.height;
-
-  // Phone is portrait — height is the constraining dimension
-  const phoneH = size * effectiveScale;
-  const phoneW = phoneH * frameAspect;
+  const frameFitScale = size * effectiveScale / Math.max(frameConfig.width, frameConfig.height);
+  const phoneW = frameConfig.width * frameFitScale;
+  const phoneH = frameConfig.height * frameFitScale;
 
   // 3. Position phone: centered + user drag offset
   const phoneX = (size - phoneW) / 2 + frameOffsetX;
   const phoneY = (size - phoneH) / 2 + frameOffsetY;
 
   // 4. Calculate screen area in canvas coordinates
-  const sx = phoneW / frameConfig.width;
-  const sy = phoneH / frameConfig.height;
   const screen = frameConfig.screen;
 
-  const scrX = phoneX + screen.x * sx;
-  const scrY = phoneY + screen.y * sy;
-  const scrW = screen.w * sx;
-  const scrH = screen.h * sy;
-  const scrR = screen.radius * Math.min(sx, sy);
-  const frameR = Math.min(phoneW, phoneH) * 0.08;
+  const scrX = phoneX + screen.x * frameFitScale;
+  const scrY = phoneY + screen.y * frameFitScale;
+  const scrW = screen.w * frameFitScale;
+  const scrH = screen.h * frameFitScale;
+  const scrR: number | CornerRadii = typeof screen.radius === "number"
+    ? screen.radius * frameFitScale
+    : [
+        screen.radius[0] * frameFitScale,
+        screen.radius[1] * frameFitScale,
+        screen.radius[2] * frameFitScale,
+        screen.radius[3] * frameFitScale,
+      ];
 
   // 5. Fill screen background (dark — like a real phone screen)
   ctx.save();

@@ -3,11 +3,17 @@
   import type { BackgroundRenderConfig } from '$lib/background';
   import { prepareBackgroundImage } from '$lib/background-renderer';
   import { store } from '$lib/state.svelte';
-  import { FRAMES, getFrameUrl } from '$lib/frames';
+  import { getFrame, getFrameUrl, type FrameModel } from '$lib/frames';
   import { render, type BackgroundTransitionOptions } from '$lib/renderer';
   import { getBackgroundRenderConfig } from '$lib/options';
   import { CANVAS_SIZE } from '$lib/constants';
   import { exportImage, exportVideoMP4 } from '$lib/export.service';
+
+  interface LoadedFrame {
+    image: HTMLImageElement;
+    config: FrameModel;
+    url: string;
+  }
 
   interface TransformValues {
     frameScale: number;
@@ -31,7 +37,7 @@
   let canvas: HTMLCanvasElement;
   let uploadInputEl: HTMLInputElement | null = null;
   let ctx = $state<CanvasRenderingContext2D | null>(null);
-  let frameImage = $state<HTMLImageElement | null>(null);
+  let loadedFrame = $state<LoadedFrame | null>(null);
   let contentElement = $state<HTMLImageElement | HTMLVideoElement | null>(null);
   let currentBackgroundLayer = $state<BackgroundLayer | null>(null);
   let previousBackgroundLayer = $state<BackgroundLayer | null>(null);
@@ -359,16 +365,14 @@
   }
 
   function drawPreview() {
-    if (!ctx || !frameImage) return;
-    const frameConfig = FRAMES[store.model];
-    if (!frameConfig) return;
+    if (!ctx || !loadedFrame) return;
 
     const background = currentBackgroundLayer?.config ?? getBackgroundRenderConfig();
     render(
       ctx,
       CANVAS_SIZE,
-      frameImage,
-      frameConfig,
+      loadedFrame.image,
+      loadedFrame.config,
       contentElement,
       {
         frameScale: animatedTransform.frameScale,
@@ -384,13 +388,14 @@
   // ====================== Frame ======================
 
   $effect(() => {
-    const url = getFrameUrl(store.model, store.color);
-    if (!url) return;
+    const url = getFrameUrl(store.model, store.color, store.frameVariant);
+    const config = getFrame(store.model, store.frameVariant);
+    if (!url || !config) return;
     let active = true;
     const img = new Image();
     img.onload = () => {
       if (!active) return;
-      frameImage = img;
+      loadedFrame = { image: img, config, url };
       requestRender();
     };
     img.src = url;
@@ -537,12 +542,15 @@
   // ====================== Export ======================
 
   async function handleExport(resolution: number, format: 'png' | 'mp4') {
-    if (!frameImage) return;
-    const fc = FRAMES[store.model];
-    if (!fc) return;
+    const config = getFrame(store.model, store.frameVariant);
+    const url = getFrameUrl(store.model, store.color, store.frameVariant);
+    if (!config || !url) return;
 
     try {
-      const ctx = { frameImage, contentElement };
+      const frameImage = loadedFrame?.url === url ? loadedFrame.image : new Image();
+      if (!frameImage.src) frameImage.src = url;
+      await frameImage.decode();
+      const ctx = { frameImage, frameConfig: config, contentElement };
       if (format === 'mp4' && store.contentType === 'video' && store.contentUrl) {
         await exportVideoMP4(ctx, resolution);
       } else {

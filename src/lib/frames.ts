@@ -3,7 +3,8 @@ export interface ScreenRect {
   y: number;
   w: number;
   h: number;
-  radius: number;
+  /** A uniform radius or [top-left, top-right, bottom-right, bottom-left]. */
+  radius: number | [number, number, number, number];
 }
 
 export interface FrameColor {
@@ -19,9 +20,11 @@ export interface FrameModel {
   height: number;
   /**
    * Screen content area inside the frame image.
-   * w × h use the **device physical resolution** so uploaded content
+   * For existing iPhones, w × h use the **device physical resolution** so uploaded content
    * maps 1 : 1 to real device pixels.
-   * x, y are the pixel offsets that centre the device screen in the frame.
+   * x, y locate the screen within the frame, which may be off-center.
+   * Duo geometry is measured from the supplied PNG screen apertures,
+   * with a 2 px overlap beneath the bezel to avoid antialiasing seams.
    *
    * Device resolutions (source: ios-resolution.com):
    *   iPhone 17 / 17 Pro  — 1206 × 2622  (402×874 @3x)
@@ -34,7 +37,63 @@ export interface FrameModel {
    */
   screen: ScreenRect;
   colors: FrameColor[];
+  variants?: FrameVariant[];
 }
+
+export interface FrameVariant extends Omit<FrameModel, 'variants'> {
+  id: string;
+  name: string;
+}
+
+function duoColors(variant: string): FrameColor[] {
+  return [
+    { name: 'Night Sky', hex: '#273545', file: `/frames/iphone-duo-night-sky-${variant}.png` },
+    { name: 'Star White', hex: '#e1e2e5', file: `/frames/iphone-duo-star-white-${variant}.png` }
+  ];
+}
+
+const DUO_VARIANTS: FrameVariant[] = [
+  {
+    id: 'inner-open-landscape',
+    name: '内屏 · 横向展开',
+    width: 3093,
+    height: 2247,
+    screen: { x: 118, y: 118, w: 2857, h: 2011, radius: 160 },
+    colors: duoColors('inner-open-landscape')
+  },
+  {
+    id: 'inner-open-portrait',
+    name: '内屏 · 纵向展开',
+    width: 2247,
+    height: 3093,
+    screen: { x: 118, y: 118, w: 2011, h: 2857, radius: 160 },
+    colors: duoColors('inner-open-portrait')
+  },
+  {
+    id: 'outer-closed-portrait',
+    name: '外屏 · 纵向合拢',
+    width: 1574,
+    height: 2194,
+    screen: { x: 86, y: 78, w: 1402, h: 2038, radius: [24, 180, 180, 24] },
+    colors: duoColors('outer-closed-portrait')
+  },
+  {
+    id: 'outer-closed-landscape',
+    name: '外屏 · 横向合拢',
+    width: 2194,
+    height: 1574,
+    screen: { x: 78, y: 86, w: 2038, h: 1402, radius: [180, 180, 24, 24] },
+    colors: duoColors('outer-closed-landscape')
+  },
+  {
+    id: 'outer-open',
+    name: '外屏 · 展开背面',
+    width: 3056,
+    height: 2194,
+    screen: { x: 1568, y: 78, w: 1402, h: 2038, radius: [24, 180, 180, 24] },
+    colors: duoColors('outer-open')
+  }
+];
 
 export const FRAMES: Record<string, FrameModel> = {
   'iPhone 17': {
@@ -71,6 +130,10 @@ export const FRAMES: Record<string, FrameModel> = {
       { name: 'Cosmic Orange', hex: '#c97637', file: '/frames/iphone-17-pro-max-cosmic-orange.png' }
     ]
   },
+  'iPhone Duo': {
+    ...DUO_VARIANTS[0],
+    variants: DUO_VARIANTS
+  },
   'iPhone Air': {
     width: 1380,
     height: 2880,
@@ -87,8 +150,13 @@ export const FRAMES: Record<string, FrameModel> = {
 
 export const MODEL_NAMES = Object.keys(FRAMES);
 
-export function getFrameUrl(model: string, color: string): string {
+export function getFrame(model: string, variant?: string): FrameModel | undefined {
   const frame = FRAMES[model];
+  return frame?.variants?.find((item) => item.id === variant) ?? frame;
+}
+
+export function getFrameUrl(model: string, color: string, variant?: string): string {
+  const frame = getFrame(model, variant);
   const c = frame?.colors.find((c) => c.name === color);
   return c?.file ?? '';
 }

@@ -9,11 +9,13 @@ import {
   type StaticMeshGradientPreset
 } from '$lib/background';
 import { CANVAS_SIZE } from '$lib/constants';
+import { getFrame } from '$lib/frames';
 import type { MediaMeshStyleCandidate } from '$lib/media-palette';
 
 class AppStore {
   model = $state("iPhone 17 Pro");
   color = $state("Silver");
+  frameVariant = $state("inner-open-landscape");
   contentUrl = $state("");
   contentType = $state<"image" | "video" | null>(null);
   backgroundMode = $state<BackgroundMode>('solid');
@@ -32,6 +34,23 @@ class AppStore {
   exportFn: ((resolution: number, format: 'png' | 'mp4') => Promise<void>) | null = null;
   /** -1 = idle, 0‒1 = video export progress */
   exportProgress = $state(-1);
+
+  setModel(model: string) {
+    this.model = model;
+    this.normalizeFrameColor();
+  }
+
+  setFrameVariant(variant: string) {
+    this.frameVariant = variant;
+    this.normalizeFrameColor();
+  }
+
+  private normalizeFrameColor() {
+    const colors = getFrame(this.model, this.frameVariant)?.colors ?? [];
+    if (!colors.some((color) => color.name === this.color)) {
+      this.color = colors[0]?.name ?? '';
+    }
+  }
 
   setContent(file: File) {
     if (this.contentUrl) URL.revokeObjectURL(this.contentUrl);

@@ -1,7 +1,7 @@
 import { prepareBackgroundImage } from '$lib/background-renderer';
 import { render } from '$lib/renderer';
 import { store } from '$lib/state.svelte';
-import { FRAMES } from '$lib/frames';
+import type { FrameModel } from '$lib/frames';
 import { getExportRenderOptions } from '$lib/options';
 
 let mediabunnyPromise: Promise<typeof import('mediabunny')> | null = null;
@@ -79,6 +79,7 @@ function downloadBlob(blob: Blob, name: string) {
 
 export interface ExportContext {
   frameImage: HTMLImageElement;
+  frameConfig: FrameModel;
   contentElement: HTMLImageElement | HTMLVideoElement | null;
 }
 
@@ -86,8 +87,7 @@ export async function exportImage(
   ctx: ExportContext,
   resolution: number
 ): Promise<void> {
-  const fc = FRAMES[store.model];
-  if (!fc) return;
+  const fc = ctx.frameConfig;
 
   const c = document.createElement('canvas');
   c.width = resolution;
@@ -107,8 +107,7 @@ export async function exportVideoMP4(
   ctx: ExportContext,
   resolution: number
 ): Promise<void> {
-  const fc = FRAMES[store.model];
-  if (!fc) return;
+  const fc = ctx.frameConfig;
 
   let mb: typeof import('mediabunny');
   try {

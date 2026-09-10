@@ -12,7 +12,7 @@
   import { store } from '$lib/state.svelte';
   import { extractMediaMeshStyleCandidates } from '$lib/media-palette';
   import { isStaticMeshGradientSupported } from '$lib/background-renderer';
-  import { FRAMES, MODEL_NAMES } from '$lib/frames';
+  import { FRAMES, MODEL_NAMES, getFrame } from '$lib/frames';
   import { SCALE_PRESETS, BG_PRESETS, EXPORT_SIZES } from '$lib/constants';
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
@@ -45,7 +45,8 @@
   let meshColorDrafts = $state<string[]>([]);
   let meshGradientSupported = $state(true);
 
-  const currentColors = $derived(FRAMES[store.model]?.colors ?? []);
+  const currentVariants = $derived(FRAMES[store.model]?.variants ?? []);
+  const currentColors = $derived(getFrame(store.model, store.frameVariant)?.colors ?? []);
   const canAddMeshColor = $derived(
     store.staticMeshGradient.colors.length < STATIC_MESH_GRADIENT_MAX_COLORS
   );
@@ -63,13 +64,6 @@
       isSameStaticMeshGradientConfig(item.config, store.staticMeshGradient)
     );
     return candidate?.id ?? null;
-  });
-
-  $effect(() => {
-    const colors = FRAMES[store.model]?.colors;
-    if (colors && !colors.find((c) => c.name === store.color)) {
-      store.color = colors[0]?.name ?? '';
-    }
   });
 
   $effect(() => {
@@ -319,7 +313,7 @@
   <!-- Device -->
   <section class="section">
     <div class="section-header">设备</div>
-    <Tabs.Root bind:value={store.model}>
+    <Tabs.Root value={store.model} onValueChange={(model) => store.setModel(model)}>
       <Tabs.List class="h-auto w-full flex-wrap gap-1 p-1">
         {#each MODEL_NAMES as model}
           <Tabs.Trigger value={model} class="flex-1 px-2 py-2 text-xs">
@@ -329,6 +323,21 @@
       </Tabs.List>
     </Tabs.Root>
   </section>
+
+  {#if currentVariants.length > 0}
+    <section class="section">
+      <div class="section-header">形态</div>
+      <Tabs.Root value={store.frameVariant} onValueChange={(variant) => store.setFrameVariant(variant)}>
+        <Tabs.List class="h-auto w-full flex-wrap gap-1 p-1">
+          {#each currentVariants as variant (variant.id)}
+            <Tabs.Trigger value={variant.id} class="flex-auto px-2 py-2 text-xs">
+              {variant.name}
+            </Tabs.Trigger>
+          {/each}
+        </Tabs.List>
+      </Tabs.Root>
+    </section>
+  {/if}
 
   <!-- Color -->
   <section class="section">
