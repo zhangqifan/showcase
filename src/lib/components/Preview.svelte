@@ -1,17 +1,18 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { ImagePlus } from '@lucide/svelte';
   import type { BackgroundRenderConfig } from '$lib/background';
   import { prepareBackgroundImage } from '$lib/background-renderer';
   import { store } from '$lib/state.svelte';
-  import { getFrame, getFrameUrl, type FrameModel } from '$lib/frames';
-  import { render, type BackgroundTransitionOptions } from '$lib/renderer';
-  import { getBackgroundRenderConfig } from '$lib/options';
+  import { getFrame, getFrameUrl, type FrameConfig } from '$lib/frames';
+  import { layoutFrame, render, type BackgroundTransitionOptions } from '$lib/renderer';
+  import { getBackgroundRenderConfig, getContentRenderOptions } from '$lib/options';
   import { CANVAS_SIZE } from '$lib/constants';
   import { exportImage, exportVideoMP4 } from '$lib/export.service';
 
   interface LoadedFrame {
     image: HTMLImageElement;
-    config: FrameModel;
+    config: FrameConfig;
     url: string;
   }
 
@@ -53,6 +54,14 @@
   let rafId = 0;
   let needsRender = false;
   let wrapperSize = $state(400);
+
+  // The empty-state hint is HTML over the screen opening so it stays legible at any preview size.
+  const emptyScreenStyle = $derived.by(() => {
+    if (store.contentUrl || !loadedFrame) return null;
+    const { screen } = layoutFrame(CANVAS_SIZE, loadedFrame.config, animatedTransform);
+    const k = wrapperSize / CANVAS_SIZE;
+    return `left:${screen.x * k}px;top:${screen.y * k}px;width:${screen.w * k}px;height:${screen.h * k}px`;
+  });
 
   let transformAnimationActive = false;
   let transformAnimationStart = 0;
@@ -352,7 +361,8 @@
         frameScale: animatedTransform.frameScale,
         frameOffsetX: animatedTransform.frameOffsetX,
         frameOffsetY: animatedTransform.frameOffsetY,
-        background
+        background,
+        ...getContentRenderOptions()
       },
       currentBackgroundLayer?.image ?? null,
       getBackgroundTransition()
@@ -423,6 +433,12 @@
   });
 
   // ====================== Render ======================
+
+  $effect(() => {
+    void store.contentMode;
+    void store.contentAlignment;
+    requestRender();
+  });
 
   $effect(() => {
     const targetTransform: TransformValues = {
@@ -629,6 +645,13 @@
       onpointercancel={finishDrag}
       onlostpointercapture={finishDrag}
     ></canvas>
+    {#if emptyScreenStyle}
+      <div class="empty-screen" style={emptyScreenStyle} aria-hidden="true">
+        <span class="empty-icon"><ImagePlus strokeWidth={1.75} /></span>
+        <span class="empty-title">添加图片或视频</span>
+        <span class="empty-detail"><span>拖放、⌘V 粘贴</span><span>或点击选择</span></span>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -642,6 +665,7 @@
     overflow: hidden;
   }
   .canvas-wrapper {
+    position: relative;
     border-radius: 16px;
     overflow: hidden;
     box-shadow: 0 0 0 1px rgba(0,0,0,.03), 0 8px 40px rgba(0,0,0,.07);
@@ -659,4 +683,70 @@
     display: none;
   }
   canvas:active { cursor: grabbing; }
+
+  .empty-screen {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 2.5cqmin, 10px);
+    container-type: size;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .empty-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: clamp(36px, 24cqmin, 64px);
+    aspect-ratio: 1;
+    margin-bottom: clamp(2px, 1.5cqmin, 6px);
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.12);
+    box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.2);
+    color: rgb(255 255 255 / 0.9);
+    transition: background-color 0.2s, transform 0.2s;
+  }
+
+  .empty-icon :global(svg) {
+    width: 46%;
+    height: 46%;
+  }
+
+  .canvas-wrapper:hover .empty-icon {
+    background: var(--system-accent);
+    transform: scale(1.05);
+  }
+
+  .empty-title,
+  .empty-detail {
+    max-width: 88cqw;
+  }
+
+  .empty-title {
+    font-size: clamp(12px, 7cqmin, 17px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: rgb(255 255 255 / 0.92);
+  }
+
+  .empty-detail {
+    font-size: clamp(10px, 4.8cqmin, 13px);
+    line-height: 1.35;
+    color: rgb(255 255 255 / 0.55);
+  }
+
+  /* Wrap only between phrases, never inside a word. */
+  .empty-detail > span {
+    display: inline-block;
+  }
+
+  @container (max-height: 120px) {
+    .empty-detail {
+      display: none;
+    }
+  }
 </style>

@@ -28,7 +28,7 @@ async function importTypeScript(relativePath) {
   return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
 }
 
-const [{ render }, { FRAMES, getFrame, getFrameUrl }] = await Promise.all([
+const [{ layoutContent, render }, { FRAMES, getFrame, getFrameUrl, getModelNames }] = await Promise.all([
   importTypeScript("../src/lib/renderer.ts"),
   importTypeScript("../src/lib/frames.ts"),
 ]);
@@ -52,11 +52,17 @@ function createContext() {
     drawImage(...args) { calls.push(["drawImage", ...args]); },
     stroke() { calls.push(["stroke"]); },
     fillText(...args) { calls.push(["fillText", ...args]); },
+    createPattern(image, repetition) {
+      const pattern = { image, repetition, transform: null };
+      pattern.setTransform = (matrix) => { pattern.transform = matrix; };
+      calls.push(["createPattern", pattern]);
+      return pattern;
+    },
   };
   return ctx;
 }
 
-function renderFrame({ size, frame, content = null, offsetX = 0, offsetY = 0 }) {
+function renderFrame({ size, frame, content = null, offsetX = 0, offsetY = 0, options = {} }) {
   const ctx = createContext();
   const frameImage = new MockImageElement(frame.width, frame.height);
   render(ctx, size, frameImage, frame, content, {
@@ -67,6 +73,7 @@ function renderFrame({ size, frame, content = null, offsetX = 0, offsetY = 0 }) 
       mode: "solid",
       solidColor: "transparent",
     },
+    ...options,
   });
   return { calls: ctx.calls, frameImage };
 }
@@ -257,4 +264,111 @@ test("outer-open content stays on the right and scales its offset before the fra
     normalizedContentDraws[0],
     "outer-open normalized content geometry",
   );
+});
+
+test("content layout honors each content mode and alignment", () => {
+  const screen = { x: 100, y: 50, w: 400, h: 200 };
+
+  assert.deepEqual(layoutContent("scaleToFill", "topLeft", 100, 100, screen, 1), screen);
+  assert.deepEqual(
+    layoutContent("scaleAspectFill", "center", 100, 100, screen, 1),
+    { x: 100, y: -50, w: 400, h: 400 },
+  );
+  assert.deepEqual(
+    layoutContent("scaleAspectFill", "top", 100, 100, screen, 1),
+    { x: 100, y: 50, w: 400, h: 400 },
+  );
+  assert.deepEqual(
+    layoutContent("scaleAspectFit", "center", 100, 100, screen, 1),
+    { x: 200, y: 50, w: 200, h: 200 },
+  );
+  assert.deepEqual(
+    layoutContent("scaleAspectFit", "right", 100, 100, screen, 1),
+    { x: 300, y: 50, w: 200, h: 200 },
+  );
+  assert.deepEqual(
+    layoutContent("original", "bottomRight", 100, 60, screen, 0.5),
+    { x: 450, y: 220, w: 50, h: 30 },
+  );
+  assert.deepEqual(
+    layoutContent("tile", "topLeft", 100, 60, screen, 0.5),
+    { x: 100, y: 50, w: 50, h: 30 },
+  );
+});
+
+test("tile mode fills the screen with a repeating pattern anchored by alignment", () => {
+  const frame = {
+    width: 200,
+    height: 100,
+    screen: { x: 0, y: 0, w: 200, h: 100, radius: 0 },
+    colors: [],
+  };
+  const content = new MockImageElement(40, 20);
+  const { calls } = renderFrame({
+    size: 1000,
+    frame,
+    content,
+    options: { contentMode: "tile", contentAlignment: "topLeft" },
+  });
+
+  assert.equal(drawFor(calls, content), undefined, "tile mode does not draw the image directly");
+  const patternCall = calls.find((call) => call[0] === "createPattern");
+  assert.ok(patternCall, "creates a pattern");
+  const [, pattern] = patternCall;
+  assert.equal(pattern.image, content);
+  assert.equal(pattern.repetition, "repeat");
+
+  // 200px frame fills 850px, so one frame pixel is 4.25 canvas units.
+  assertNumbersClose(
+    [pattern.transform.a, pattern.transform.d, pattern.transform.e, pattern.transform.f],
+    [4.25, 4.25, 75, 287.5],
+    "tile pattern transform",
+  );
+});
+
+test("Mac frames are 1:1 with their native panel and every color PNG matches its size", async () => {
+  const macModels = getModelNames("mac");
+  assert.deepEqual(macModels, [
+    "MacBook Neo",
+    "MacBook Air",
+    "MacBook Pro",
+    "MacBook Pro XDR",
+    "iMac",
+    "Studio Display",
+  ]);
+  assert.ok(getModelNames("iphone").includes("iPhone 17 Pro"));
+
+  const expectedScreens = {
+    "MacBook Neo": [[undefined, 2408, 1506]],
+    "MacBook Air": [["13", 2560, 1664], ["15", 2880, 1864]],
+    "MacBook Pro": [["14", 3024, 1964], ["16", 3456, 2234]],
+    "MacBook Pro XDR": [["14", 3024, 1986], ["16", 3472, 2266]],
+    iMac: [[undefined, 4480, 2520]],
+    "Studio Display": [["standard", 5120, 2880], ["xdr", 5120, 2880]],
+  };
+
+  const urls = new Set();
+  for (const [model, screens] of Object.entries(expectedScreens)) {
+    for (const [variantId, screenW, screenH] of screens) {
+      const frame = getFrame(model, variantId);
+      const label = `${model} ${variantId ?? ""}`.trim();
+      assert.ok(frame, label);
+      assert.deepEqual([frame.screen.w, frame.screen.h], [screenW, screenH], `${label} screen`);
+      assert.ok(frame.screen.x + frame.screen.w <= frame.width, `${label} screen fits horizontally`);
+      assert.ok(frame.screen.y + frame.screen.h <= frame.height, `${label} screen fits vertically`);
+
+      for (const color of frame.colors) {
+        const url = getFrameUrl(model, color.name, variantId);
+        urls.add(url);
+        const png = await readFile(new URL(`../static${url}`, import.meta.url));
+        assert.equal(png.subarray(12, 16).toString("ascii"), "IHDR", `${url} IHDR`);
+        assert.deepEqual(
+          [png.readUInt32BE(16), png.readUInt32BE(20)],
+          [frame.width, frame.height],
+          `${url} dimensions`,
+        );
+      }
+    }
+  }
+  assert.equal(urls.size, 31);
 });

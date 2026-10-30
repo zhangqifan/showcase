@@ -8,7 +8,8 @@ import {
   type StaticMeshGradientConfig,
   type StaticMeshGradientPreset
 } from '$lib/background';
-import { getFrame } from '$lib/frames';
+import type { ContentAlignment, ContentMode } from '$lib/constants';
+import { FRAMES, getFrame } from '$lib/frames';
 import { SnapshotHistory } from '$lib/history';
 import type { MediaMeshStyleCandidate } from '$lib/media-palette';
 
@@ -18,6 +19,8 @@ interface EditorSnapshot {
   frameVariant: string;
   contentUrl: string;
   contentType: 'image' | 'video' | null;
+  contentMode: ContentMode;
+  contentAlignment: ContentAlignment;
   backgroundMode: BackgroundMode;
   backgroundColor: string;
   staticMeshGradient: StaticMeshGradientConfig;
@@ -32,6 +35,9 @@ export class AppStore {
   frameVariant = $state("inner-open-landscape");
   contentUrl = $state("");
   contentType = $state<"image" | "video" | null>(null);
+  /** Only applied to Mac frames; iPhone screens always aspect-fill. */
+  contentMode = $state<ContentMode>('scaleAspectFill');
+  contentAlignment = $state<ContentAlignment>('center');
   backgroundMode = $state<BackgroundMode>('solid');
   backgroundColor = $state("#ffffff");
   private skipNextBackgroundTransition = $state(false);
@@ -59,6 +65,8 @@ export class AppStore {
       frameVariant: this.frameVariant,
       contentUrl: this.contentUrl,
       contentType: this.contentType,
+      contentMode: this.contentMode,
+      contentAlignment: this.contentAlignment,
       backgroundMode: this.backgroundMode,
       backgroundColor: this.backgroundColor,
       staticMeshGradient: cloneStaticMeshGradientConfig(this.staticMeshGradient),
@@ -119,6 +127,10 @@ export class AppStore {
 
   setModel(model: string) {
     this.model = model;
+    const variants = FRAMES[model]?.variants;
+    if (variants && !variants.some((variant) => variant.id === this.frameVariant)) {
+      this.frameVariant = variants[0].id;
+    }
     this.normalizeFrameColor();
   }
 

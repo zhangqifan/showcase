@@ -68,7 +68,7 @@ async function importStateModule() {
   };
 }
 
-const { AppStore, store: sharedStore, getExportRenderOptions } = await importStateModule();
+const { AppStore, store: sharedStore, getContentRenderOptions, getExportRenderOptions } = await importStateModule();
 
 async function assertBlobUrl(url, expected) {
   const response = await fetch(url);
@@ -268,4 +268,47 @@ test("export preserves composition at each output size and snapshots the backgro
     assert.deepEqual(options.background.staticMeshGradient.colors, originalColors);
   }
   assert.deepEqual([sharedStore.frameOffsetX, sharedStore.frameOffsetY], [240, -160]);
+});
+
+test("switching models keeps a matching variant id and otherwise falls back to the first", () => {
+  const store = new AppStore();
+
+  store.setModel("MacBook Pro");
+  assert.deepEqual([store.frameVariant, store.color], ["14", "Silver"]);
+  store.setFrameVariant("16");
+  store.color = "Space Black";
+  store.setModel("MacBook Pro XDR");
+  assert.deepEqual([store.frameVariant, store.color], ["16", "Space Black"]);
+
+  store.setModel("Studio Display");
+  assert.deepEqual([store.frameVariant, store.color], ["standard", "Light"]);
+});
+
+test("content mode is part of history and only reaches Mac render options", () => {
+  const store = new AppStore();
+  store.contentMode = "tile";
+  store.contentAlignment = "bottomRight";
+  store.recordHistory();
+  store.contentMode = "scaleAspectFit";
+  store.recordHistory();
+
+  assert.equal(store.undo(), true);
+  assert.deepEqual([store.contentMode, store.contentAlignment], ["tile", "bottomRight"]);
+
+  const previous = sharedStore.getSnapshot();
+  sharedStore.contentMode = "original";
+  sharedStore.contentAlignment = "top";
+  sharedStore.setModel("iPhone 17 Pro");
+  assert.deepEqual(getContentRenderOptions(), {});
+  assert.equal(getExportRenderOptions(1080).contentMode, undefined);
+
+  sharedStore.setModel("MacBook Air");
+  assert.deepEqual(getContentRenderOptions(), { contentMode: "original", contentAlignment: "top" });
+  assert.equal(getExportRenderOptions(1080).contentMode, "original");
+
+  sharedStore.setModel(previous.model);
+  sharedStore.setFrameVariant(previous.frameVariant);
+  sharedStore.color = previous.color;
+  sharedStore.contentMode = previous.contentMode;
+  sharedStore.contentAlignment = previous.contentAlignment;
 });

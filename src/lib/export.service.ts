@@ -1,7 +1,7 @@
 import { prepareBackgroundImage } from '$lib/background-renderer';
 import { render } from '$lib/renderer';
 import { store } from '$lib/state.svelte';
-import type { FrameModel } from '$lib/frames';
+import type { FrameConfig } from '$lib/frames';
 import { getExportRenderOptions } from '$lib/options';
 import { captureVideoFrames } from '$lib/video-capture';
 
@@ -80,7 +80,7 @@ function downloadBlob(blob: Blob, name: string) {
 
 export interface ExportContext {
   frameImage: HTMLImageElement;
-  frameConfig: FrameModel;
+  frameConfig: FrameConfig;
   contentElement: HTMLImageElement | HTMLVideoElement | null;
 }
 

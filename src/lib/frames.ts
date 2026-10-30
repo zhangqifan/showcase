@@ -13,7 +13,10 @@ export interface FrameColor {
   file: string;
 }
 
+export type DeviceFamily = 'iphone' | 'mac';
+
 export interface FrameModel {
+  family: DeviceFamily;
   /** Frame image pixel width */
   width: number;
   /** Frame image pixel height */
@@ -34,13 +37,26 @@ export interface FrameModel {
    *
    * x = (frame width  − device width)  / 2
    * y = (frame height − device height) / 2
+   *
+   * Mac geometry is measured from the transparent screen opening of each
+   * Apple Design Resources bezel, which matches the native panel resolution:
+   *   MacBook Neo            — 2408 × 1506
+   *   MacBook Air 13" / 15"  — 2560 × 1664 / 2880 × 1864
+   *   MacBook Pro 14" / 16"  — 3024 × 1964 / 3456 × 2234
+   *   MacBook Pro XDR 14" / 16" — 3024 × 1986 / 3472 × 2266
+   *   iMac 24"               — 4480 × 2520
+   *   Studio Display (XDR)   — 5120 × 2880
+   * MacBook openings have square bottom corners beneath the hinge.
    */
   screen: ScreenRect;
   colors: FrameColor[];
   variants?: FrameVariant[];
 }
 
-export interface FrameVariant extends Omit<FrameModel, 'variants'> {
+/** The geometry and colors needed to draw one frame, shared by models and their variants. */
+export type FrameConfig = Omit<FrameModel, 'family' | 'variants'>;
+
+export interface FrameVariant extends FrameConfig {
   id: string;
   name: string;
 }
@@ -95,8 +111,110 @@ const DUO_VARIANTS: FrameVariant[] = [
   }
 ];
 
+function macColors(prefix: string, colors: [string, string][]): FrameColor[] {
+  return colors.map(([name, hex]) => ({
+    name,
+    hex,
+    file: `/frames/${prefix}-${name.toLowerCase().replaceAll(' ', '-')}.png`
+  }));
+}
+
+const MACBOOK_AIR_COLORS: [string, string][] = [
+  ['Midnight', '#2e3641'],
+  ['Silver', '#e3e4e5'],
+  ['Sky Blue', '#c6d4df'],
+  ['Starlight', '#ede3d3']
+];
+
+const MACBOOK_PRO_COLORS: [string, string][] = [
+  ['Silver', '#d6d7d9'],
+  ['Space Black', '#2e2c2f']
+];
+
+const STUDIO_DISPLAY_COLORS: [string, string][] = [
+  ['Light', '#e8e8ea'],
+  ['Dark', '#1d1d1f']
+];
+
+const MACBOOK_AIR_VARIANTS: FrameVariant[] = [
+  {
+    id: '13',
+    name: '13 英寸',
+    width: 3400,
+    height: 2240,
+    screen: { x: 420, y: 288, w: 2560, h: 1664, radius: [34, 34, 0, 0] },
+    colors: macColors('macbook-air-13', MACBOOK_AIR_COLORS)
+  },
+  {
+    id: '15',
+    name: '15 英寸',
+    width: 3540,
+    height: 2300,
+    screen: { x: 329, y: 218, w: 2880, h: 1864, radius: [31, 31, 0, 0] },
+    colors: macColors('macbook-air-15', MACBOOK_AIR_COLORS)
+  }
+];
+
+const MACBOOK_PRO_VARIANTS: FrameVariant[] = [
+  {
+    id: '14',
+    name: '14 英寸',
+    width: 3860,
+    height: 2540,
+    screen: { x: 418, y: 288, w: 3024, h: 1964, radius: [38, 38, 0, 0] },
+    colors: macColors('macbook-pro-14', MACBOOK_PRO_COLORS)
+  },
+  {
+    id: '16',
+    name: '16 英寸',
+    width: 4260,
+    height: 2840,
+    screen: { x: 402, y: 303, w: 3456, h: 2234, radius: [38, 38, 0, 0] },
+    colors: macColors('macbook-pro-16', MACBOOK_PRO_COLORS)
+  }
+];
+
+const MACBOOK_PRO_XDR_VARIANTS: FrameVariant[] = [
+  {
+    id: '14',
+    name: '14 英寸',
+    width: 3860,
+    height: 2540,
+    screen: { x: 418, y: 277, w: 3024, h: 1986, radius: 61 },
+    colors: macColors('macbook-pro-xdr-14', MACBOOK_PRO_COLORS)
+  },
+  {
+    id: '16',
+    name: '16 英寸',
+    width: 4260,
+    height: 2840,
+    screen: { x: 394, y: 287, w: 3472, h: 2266, radius: 61 },
+    colors: macColors('macbook-pro-xdr-16', MACBOOK_PRO_COLORS)
+  }
+];
+
+const STUDIO_DISPLAY_VARIANTS: FrameVariant[] = [
+  {
+    id: 'standard',
+    name: '标准',
+    width: 5400,
+    height: 4160,
+    screen: { x: 140, y: 140, w: 5120, h: 2880, radius: 0 },
+    colors: macColors('studio-display', STUDIO_DISPLAY_COLORS)
+  },
+  {
+    id: 'xdr',
+    name: 'XDR',
+    width: 5400,
+    height: 4160,
+    screen: { x: 140, y: 140, w: 5120, h: 2880, radius: 0 },
+    colors: macColors('studio-display-xdr', STUDIO_DISPLAY_COLORS)
+  }
+];
+
 export const FRAMES: Record<string, FrameModel> = {
   'iPhone 17': {
+    family: 'iphone',
     width: 1350,
     height: 2760,
     // x = (1350 − 1206) / 2 = 72,  y = (2760 − 2622) / 2 = 69
@@ -110,6 +228,7 @@ export const FRAMES: Record<string, FrameModel> = {
     ]
   },
   'iPhone 17 Pro': {
+    family: 'iphone',
     width: 1350,
     height: 2760,
     screen: { x: 72, y: 69, w: 1206, h: 2622, radius: 165 },
@@ -120,6 +239,7 @@ export const FRAMES: Record<string, FrameModel> = {
     ]
   },
   'iPhone 17 Pro Max': {
+    family: 'iphone',
     width: 1470,
     height: 3000,
     // x = (1470 − 1320) / 2 = 75,  y = (3000 − 2868) / 2 = 66
@@ -131,10 +251,12 @@ export const FRAMES: Record<string, FrameModel> = {
     ]
   },
   'iPhone Duo': {
+    family: 'iphone',
     ...DUO_VARIANTS[0],
     variants: DUO_VARIANTS
   },
   'iPhone Air': {
+    family: 'iphone',
     width: 1380,
     height: 2880,
     // x = (1380 − 1260) / 2 = 60,  y = (2880 − 2736) / 2 = 72
@@ -145,12 +267,67 @@ export const FRAMES: Record<string, FrameModel> = {
       { name: 'Sky Blue', hex: '#7eb8da', file: '/frames/iphone-air-sky-blue.png' },
       { name: 'Light Gold', hex: '#e8d5b7', file: '/frames/iphone-air-light-gold.png' }
     ]
+  },
+  'MacBook Neo': {
+    family: 'mac',
+    width: 3220,
+    height: 2100,
+    screen: { x: 406, y: 297, w: 2408, h: 1506, radius: [34, 34, 0, 0] },
+    colors: macColors('macbook-neo', [
+      ['Blush', '#e4c4c2'],
+      ['Citrus', '#d8d48a'],
+      ['Indigo', '#3a4766'],
+      ['Silver', '#d6d7d9']
+    ])
+  },
+  'MacBook Air': {
+    family: 'mac',
+    ...MACBOOK_AIR_VARIANTS[0],
+    variants: MACBOOK_AIR_VARIANTS
+  },
+  'MacBook Pro': {
+    family: 'mac',
+    ...MACBOOK_PRO_VARIANTS[0],
+    variants: MACBOOK_PRO_VARIANTS
+  },
+  'MacBook Pro XDR': {
+    family: 'mac',
+    ...MACBOOK_PRO_XDR_VARIANTS[0],
+    variants: MACBOOK_PRO_XDR_VARIANTS
+  },
+  iMac: {
+    family: 'mac',
+    width: 4760,
+    height: 4050,
+    screen: { x: 140, y: 150, w: 4480, h: 2520, radius: 0 },
+    colors: macColors('imac-24', [
+      ['Blue', '#afbed8'],
+      ['Green', '#b2c7b7'],
+      ['Orange', '#e8bba5'],
+      ['Pink', '#e6b5c1'],
+      ['Purple', '#b8b3d0'],
+      ['Silver', '#cfd0d2'],
+      ['Yellow', '#e7d9a5']
+    ])
+  },
+  'Studio Display': {
+    family: 'mac',
+    ...STUDIO_DISPLAY_VARIANTS[0],
+    variants: STUDIO_DISPLAY_VARIANTS
   }
 };
 
 export const MODEL_NAMES = Object.keys(FRAMES);
 
-export function getFrame(model: string, variant?: string): FrameModel | undefined {
+export function getModelNames(family: DeviceFamily): string[] {
+  return MODEL_NAMES.filter((model) => FRAMES[model].family === family);
+}
+
+export function getFrameFamily(model: string): DeviceFamily {
+  return FRAMES[model]?.family ?? 'iphone';
+}
+
+export function getFrame(model: string, variant?: string): FrameConfig | undefined {
   const frame = FRAMES[model];
   return frame?.variants?.find((item) => item.id === variant) ?? frame;
 }

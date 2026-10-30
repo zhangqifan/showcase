@@ -1,11 +1,23 @@
 import type { BackgroundRenderConfig } from './background';
-import type { FrameModel } from "./frames";
+import type { ContentAlignment, ContentMode } from './constants';
+import type { FrameConfig } from "./frames";
 
 export interface RenderOptions {
   frameScale: number;
   frameOffsetX: number;
   frameOffsetY: number;
   background: BackgroundRenderConfig;
+  /** Defaults to `scaleAspectFill`. */
+  contentMode?: ContentMode;
+  /** Defaults to `center`; ignored by `scaleToFill`. */
+  contentAlignment?: ContentAlignment;
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface BackgroundTransitionOptions {
@@ -21,12 +33,96 @@ const BASE_FILL = 0.85;
 
 type CornerRadii = [number, number, number, number];
 
+export interface FrameLayout {
+  /** Frame bounds in canvas units. */
+  frame: Rect;
+  /** Screen opening in canvas units. */
+  screen: Rect;
+  /** Canvas units per frame pixel. */
+  frameFitScale: number;
+}
+
+/** Places the frame on a `size × size` canvas: centered, scaled, then offset by the user's drag. */
+export function layoutFrame(
+  size: number,
+  frameConfig: FrameConfig,
+  transform: Pick<RenderOptions, "frameScale" | "frameOffsetX" | "frameOffsetY">,
+): FrameLayout {
+  const frameFitScale = size * BASE_FILL * transform.frameScale / Math.max(frameConfig.width, frameConfig.height);
+  const w = frameConfig.width * frameFitScale;
+  const h = frameConfig.height * frameFitScale;
+  const x = (size - w) / 2 + transform.frameOffsetX;
+  const y = (size - h) / 2 + transform.frameOffsetY;
+  const { screen } = frameConfig;
+  return {
+    frame: { x, y, w, h },
+    screen: {
+      x: x + screen.x * frameFitScale,
+      y: y + screen.y * frameFitScale,
+      w: screen.w * frameFitScale,
+      h: screen.h * frameFitScale,
+    },
+    frameFitScale,
+  };
+}
+
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
 function lerp(start: number, end: number, t: number): number {
   return start + (end - start) * t;
+}
+
+const ALIGNMENT_FACTORS: Record<ContentAlignment, [number, number]> = {
+  topLeft: [0, 0],
+  top: [0.5, 0],
+  topRight: [1, 0],
+  left: [0, 0.5],
+  center: [0.5, 0.5],
+  right: [1, 0.5],
+  bottomLeft: [0, 1],
+  bottom: [0.5, 1],
+  bottomRight: [1, 1],
+};
+
+/**
+ * Places content of `contentW × contentH` source pixels inside `screen`.
+ * `pixelScale` maps one source pixel to canvas units, so `original` and `tile`
+ * keep content at the device's native pixel density.
+ * For `tile`, the returned rect is the anchor tile that the pattern repeats from.
+ */
+export function layoutContent(
+  mode: ContentMode,
+  alignment: ContentAlignment,
+  contentW: number,
+  contentH: number,
+  screen: Rect,
+  pixelScale: number,
+): Rect {
+  if (mode === "scaleToFill") return { ...screen };
+
+  let w: number, h: number;
+  if (mode === "original" || mode === "tile") {
+    w = contentW * pixelScale;
+    h = contentH * pixelScale;
+  } else {
+    const widthRatio = screen.w / contentW;
+    const heightRatio = screen.h / contentH;
+    const ratio = mode === "scaleAspectFit"
+      ? Math.min(widthRatio, heightRatio)
+      : Math.max(widthRatio, heightRatio);
+    w = contentW * ratio;
+    h = contentH * ratio;
+  }
+
+  const [ax, ay] = ALIGNMENT_FACTORS[alignment];
+  return {
+    x: screen.x + (screen.w - w) * ax,
+    y: screen.y + (screen.h - h) * ay,
+    w,
+    h,
+  };
 }
 
 function drawBackgroundLayer(
@@ -88,17 +184,16 @@ export function render(
   ctx: CanvasRenderingContext2D,
   size: number,
   frameImage: HTMLImageElement | null,
-  frameConfig: FrameModel,
+  frameConfig: FrameConfig,
   content: HTMLImageElement | HTMLVideoElement | null,
   options: RenderOptions,
   backgroundImage: CanvasImageSource | null = null,
   backgroundTransition: BackgroundTransitionOptions | null = null
 ) {
   const {
-    frameScale,
-    frameOffsetX,
-    frameOffsetY,
     background,
+    contentMode = "scaleAspectFill",
+    contentAlignment = "center",
   } = options;
 
   // 1. Clear and fill background
@@ -121,23 +216,12 @@ export function render(
 
   if (!frameImage) return;
 
-  // 2. Calculate phone size using base fit * multiplier
-  const effectiveScale = BASE_FILL * frameScale;
-  const frameFitScale = size * effectiveScale / Math.max(frameConfig.width, frameConfig.height);
-  const phoneW = frameConfig.width * frameFitScale;
-  const phoneH = frameConfig.height * frameFitScale;
-
-  // 3. Position phone: centered + user drag offset
-  const phoneX = (size - phoneW) / 2 + frameOffsetX;
-  const phoneY = (size - phoneH) / 2 + frameOffsetY;
-
-  // 4. Calculate screen area in canvas coordinates
+  // 2. Place the frame and its screen opening
+  const layout = layoutFrame(size, frameConfig, options);
+  const { frameFitScale } = layout;
+  const { x: phoneX, y: phoneY, w: phoneW, h: phoneH } = layout.frame;
+  const { x: scrX, y: scrY, w: scrW, h: scrH } = layout.screen;
   const screen = frameConfig.screen;
-
-  const scrX = phoneX + screen.x * frameFitScale;
-  const scrY = phoneY + screen.y * frameFitScale;
-  const scrW = screen.w * frameFitScale;
-  const scrH = screen.h * frameFitScale;
   const scrR: number | CornerRadii = typeof screen.radius === "number"
     ? screen.radius * frameFitScale
     : [
@@ -147,14 +231,14 @@ export function render(
         screen.radius[3] * frameFitScale,
       ];
 
-  // 5. Fill screen background (dark — like a real phone screen)
+  // 3. Fill screen background (dark — like a real phone screen)
   ctx.save();
   drawRoundedRect(ctx, scrX, scrY, scrW, scrH, scrR);
   ctx.fillStyle = "#000000";
   ctx.fill();
   ctx.restore();
 
-  // 6. Draw content or placeholder
+  // 4. Draw content; the empty-state hint is an HTML overlay in Preview
   if (content) {
     const cw =
       content instanceof HTMLVideoElement
@@ -170,67 +254,37 @@ export function render(
       drawRoundedRect(ctx, scrX, scrY, scrW, scrH, scrR);
       ctx.clip();
 
-      const cAspect = cw / ch;
-      const sAspect = scrW / scrH;
+      const rect = layoutContent(
+        contentMode,
+        contentAlignment,
+        cw,
+        ch,
+        { x: scrX, y: scrY, w: scrW, h: scrH },
+        frameFitScale,
+      );
 
-      let drawW: number, drawH: number;
-      if (cAspect > sAspect) {
-        // Content wider → match height
-        drawH = scrH;
-        drawW = drawH * cAspect;
+      if (contentMode === "tile") {
+        const pattern = ctx.createPattern(content, "repeat");
+        if (pattern) {
+          // Pattern space starts at the anchor tile, scaled to native pixel density.
+          pattern.setTransform({
+            a: rect.w / cw,
+            b: 0,
+            c: 0,
+            d: rect.h / ch,
+            e: rect.x,
+            f: rect.y,
+          });
+          ctx.fillStyle = pattern;
+          ctx.fillRect(scrX, scrY, scrW, scrH);
+        }
       } else {
-        // Content taller → match width
-        drawW = scrW;
-        drawH = drawW / cAspect;
+        ctx.drawImage(content, rect.x, rect.y, rect.w, rect.h);
       }
-
-      // Always centered within screen
-      const drawX = scrX + (scrW - drawW) / 2;
-      const drawY = scrY + (scrH - drawH) / 2;
-
-      ctx.drawImage(content, drawX, drawY, drawW, drawH);
       ctx.restore();
     }
-  } else {
-    // 无内容时显示占位提示
-    ctx.save();
-    drawRoundedRect(ctx, scrX, scrY, scrW, scrH, scrR);
-    ctx.clip();
-
-    const centerX = scrX + scrW / 2;
-    const centerY = scrY + scrH / 2;
-    const base = Math.min(scrW, scrH);
-    const iconSize = base * 0.048;
-    const armLen = iconSize / 2;
-    const iconY = centerY - base * 0.06;
-
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
-    ctx.lineWidth = iconSize * 0.1;
-    ctx.lineCap = "round";
-
-    ctx.beginPath();
-    ctx.moveTo(centerX - armLen, iconY);
-    ctx.lineTo(centerX + armLen, iconY);
-    ctx.moveTo(centerX, iconY - armLen);
-    ctx.lineTo(centerX, iconY + armLen);
-    ctx.stroke();
-
-    const fontSize = base * 0.035;
-    const lineGap = base * 0.025;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
-    ctx.fillText("上传图片或视频", centerX, centerY + lineGap / 2);
-
-    ctx.font = `400 ${fontSize * 0.9}px system-ui, -apple-system, sans-serif`;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.28)";
-    ctx.fillText("拖拽至此处或从右侧上传", centerX, centerY + lineGap / 2 + fontSize + lineGap);
-
-    ctx.restore();
   }
 
-  // 7. Draw phone frame overlay on top
+  // 5. Draw the frame on top
   ctx.drawImage(frameImage, phoneX, phoneY, phoneW, phoneH);
 }
