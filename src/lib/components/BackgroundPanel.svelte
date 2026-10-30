@@ -11,11 +11,11 @@
   import { isStaticMeshGradientSupported } from '$lib/background-renderer';
   import MeshStylePreview from '$lib/components/MeshStylePreview.svelte';
   import { Button } from '$lib/components/ui/button';
-  import * as Tabs from '$lib/components/ui/tabs';
+  import SegmentedControl from '$lib/components/SegmentedControl.svelte';
   import { BG_PRESETS } from '$lib/constants';
   import { extractMediaMeshStyleCandidates } from '$lib/media-palette';
   import { store } from '$lib/state.svelte';
-  import { ChevronLeft, ChevronRight, Dices, Plus, X } from '@lucide/svelte';
+  import { Blend, ChevronLeft, ChevronRight, Dices, PaintBucket, Plus, X } from '@lucide/svelte';
   import { createHorizontalScrollRail } from './scroll-rail.svelte';
 
   let meshControlsExpanded = $state(false);
@@ -151,51 +151,52 @@
 </script>
 
 <!-- Background -->
-<section class="section">
-    <div class="section-header">背景</div>
-    <Tabs.Root bind:value={store.backgroundMode}>
-      <Tabs.List class="grid h-auto w-full grid-cols-2 gap-1 p-1">
-        <Tabs.Trigger value="solid" class="px-2 py-2 text-xs">纯色</Tabs.Trigger>
-        {#if meshGradientSupported}
-          <Tabs.Trigger value="staticMeshGradient" class="px-2 py-2 text-xs">Mesh Gradient</Tabs.Trigger>
-        {:else}
-          <div
-            class="mesh-tab-disabled-wrap"
-            aria-label="Mesh Gradient 需要 WebGL2，当前环境不可用"
-          >
-            <Tabs.Trigger value="staticMeshGradient" class="px-2 py-2 text-xs" disabled>
-              Mesh Gradient
-            </Tabs.Trigger>
-            <span class="mesh-tab-popover" role="tooltip">
-              当前浏览器环境不支持 WebGL2，Mesh Gradient 已禁用。
-            </span>
-          </div>
-        {/if}
-      </Tabs.List>
-    </Tabs.Root>
+<section class="inspector-group" aria-labelledby="background-heading">
+  <h2 class="inspector-heading" id="background-heading">背景</h2>
+  <div class="inspector-row">
+    <span class="inspector-label">样式</span>
+    <SegmentedControl
+      label="背景样式"
+      value={store.backgroundMode}
+      onchange={(mode) => (store.backgroundMode = mode)}
+      options={[
+        { value: 'solid', label: '纯色', icon: PaintBucket },
+        {
+          value: 'staticMeshGradient',
+          label: 'Mesh',
+          icon: Blend,
+          disabled: !meshGradientSupported,
+          title: meshGradientSupported ? 'Mesh Gradient' : '当前浏览器环境不支持 WebGL2，Mesh Gradient 已禁用'
+        }
+      ]}
+    />
+  </div>
 
   {#if store.backgroundMode === 'solid' || !meshGradientSupported}
-    <div class="bg-row">
-      {#each BG_PRESETS as bg}
-        <button
-          type="button"
-          class="bg-chip {store.backgroundColor === bg.color ? 'active' : ''}"
-          style="background-color: {bg.color}"
-          title={bg.label}
-          onclick={() => store.setBackgroundColor(bg.color)}
-        ></button>
-      {/each}
-      <label class="bg-picker" title="自定义颜色">
-        <input
-          type="color"
-          value={store.backgroundColor}
-          class="color-input"
-          oninput={(event) =>
-            store.setBackgroundColor((event.currentTarget as HTMLInputElement).value, {
-              skipTransition: true
-            })}
-        />
-      </label>
+      <div class="inspector-row">
+      <span class="inspector-label">颜色</span>
+      <div class="bg-row">
+        {#each BG_PRESETS as bg}
+          <button
+            type="button"
+            class="bg-chip {store.backgroundColor === bg.color ? 'active' : ''}"
+            style="background-color: {bg.color}"
+            title={bg.label}
+            onclick={() => store.setBackgroundColor(bg.color)}
+          ></button>
+        {/each}
+        <label class="bg-picker" title="自定义颜色">
+          <input
+            type="color"
+            value={store.backgroundColor}
+            class="color-input"
+            oninput={(event) =>
+              store.setBackgroundColor((event.currentTarget as HTMLInputElement).value, {
+                skipTransition: true
+              })}
+          />
+        </label>
+      </div>
     </div>
   {:else}
     <div class="mesh-panel">
@@ -450,21 +451,6 @@
 </section>
 
 <style>
-  .section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px 0;
-  }
-
-  .section-header {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--muted-foreground);
-  }
-
   .bg-row {
     display: flex;
     flex-wrap: wrap;
@@ -476,10 +462,6 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 12px;
-    border-radius: 12px;
-    background: color-mix(in oklch, var(--muted) 45%, transparent);
-    border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   }
 
   .mesh-header {
@@ -875,55 +857,6 @@
     cursor: pointer;
   }
 
-  .mesh-tab-disabled-wrap {
-    position: relative;
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    outline: none;
-  }
-
-  .mesh-tab-disabled-wrap :global([data-slot='tabs-trigger']) {
-    width: 100%;
-  }
-
-  .mesh-tab-popover {
-    position: absolute;
-    left: 50%;
-    top: calc(100% + 8px);
-    transform: translateX(-50%) translateY(2px);
-    min-width: 210px;
-    max-width: 260px;
-    border-radius: 10px;
-    background: color-mix(in oklch, var(--foreground) 94%, black);
-    color: color-mix(in oklch, white 95%, var(--foreground));
-    padding: 8px 10px;
-    font-size: 11px;
-    line-height: 1.4;
-    text-align: center;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease;
-    z-index: 20;
-  }
-
-  .mesh-tab-popover::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: -4px;
-    width: 8px;
-    height: 8px;
-    background: inherit;
-    transform: translateX(-50%) rotate(45deg);
-  }
-
-  .mesh-tab-disabled-wrap:hover .mesh-tab-popover {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
   .mesh-error {
     margin: 0;
     padding: 10px 12px;
@@ -935,9 +868,9 @@
   }
 
   .bg-chip {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
     border: 2px solid transparent;
     padding: 0;
     background: transparent;
@@ -950,14 +883,14 @@
   }
 
   .bg-chip.active {
-    border-color: var(--primary);
+    border-color: var(--system-accent);
   }
 
   .bg-picker {
     position: relative;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
     border: 1px solid var(--border);

@@ -126,3 +126,99 @@
   --bg-card: var(--card);
   --bg-preview: oklch(0.967 0.001 286.375);
 }
+/* macOS-style inspector controls (Apple HIG system colors) */
+:root {
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --system-accent: #007aff;
+  --focus-ring: color-mix(in srgb, var(--system-accent) 45%, transparent);
+  --control-track: rgb(118 118 128 / 0.12);
+  --control-hover: rgb(0 0 0 / 0.05);
+  --control-thumb: #ffffff;
+  --control-border: rgb(0 0 0 / 0.12);
+  --label-secondary: rgb(60 60 67 / 0.6);
+  --label-tertiary: rgb(60 60 67 / 0.36);
+  --separator: rgb(60 60 67 / 0.14);
+  --inspector-bg: #f5f5f7;
+  --group-bg: #ffffff;
+  --group-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 8px 24px -12px rgb(0 0 0 / 0.08);
+}
+
+.dark {
+  --system-accent: #0a84ff;
+  --control-track: rgb(118 118 128 / 0.24);
+  --control-hover: rgb(255 255 255 / 0.06);
+  --control-thumb: rgb(255 255 255 / 0.2);
+  --control-border: rgb(255 255 255 / 0.12);
+  --label-secondary: rgb(235 235 245 / 0.6);
+  --label-tertiary: rgb(235 235 245 / 0.3);
+  --separator: rgb(84 84 88 / 0.6);
+  --inspector-bg: #1c1c1e;
+  --group-bg: #2c2c2e;
+  --group-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.06);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-system);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* Grouped inset card, as in macOS System Settings. */
+  .inspector-group {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 16px 18px;
+    border-radius: 14px;
+    background: var(--group-bg);
+    box-shadow: var(--group-shadow);
+  }
+
+  .inspector-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 18px;
+    margin: 0 0 2px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--foreground);
+  }
+
+  .inspector-heading-detail {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--label-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .inspector-row {
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 12px;
+    min-height: 28px;
+  }
+
+  .inspector-label {
+    font-size: 13px;
+    color: var(--label-secondary);
+    white-space: nowrap;
+  }
+
+  .inspector-caption {
+    margin: -4px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--label-secondary);
+  }
+}

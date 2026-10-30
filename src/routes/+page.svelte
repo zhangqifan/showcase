@@ -109,28 +109,13 @@
   }
 
   .config-area {
-    width: 380px;
+    width: 360px;
     flex-shrink: 0;
-    border-left: 1px solid var(--border);
-    background: var(--bg-card);
-    overflow-y: auto;
-  }
-
-  /* ---- Scrollbar ---- */
-  .config-area::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .config-area::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .config-area::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 3px;
-  }
-
-  .config-area::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-left: 0.5px solid var(--separator);
+    background: var(--inspector-bg);
+    overflow: hidden;
   }
 </style>
