@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "showcase",
+  "compatibility_date": "2026-10-31",
+  // Static assets only; files live under build/showcase to mirror the route path.
+  "assets": {
+    "directory": "build"
+  },
+  "routes": [
+    { "pattern": "nsshuhari.me/showcase", "zone_name": "nsshuhari.me" },
+    { "pattern": "nsshuhari.me/showcase/*", "zone_name": "nsshuhari.me" }
+  ],
+  "workers_dev": false
+}

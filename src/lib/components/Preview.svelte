@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { asset } from '$app/paths';
   import { ImagePlus } from '@lucide/svelte';
   import type { BackgroundRenderConfig } from '$lib/background';
   import { prepareBackgroundImage } from '$lib/background-renderer';
@@ -371,8 +372,14 @@
 
   // ====================== Frame ======================
 
+  // Frame files are root-relative; resolve them against the app's base path.
+  function currentFrameUrl(): string {
+    const file = getFrameUrl(store.model, store.color, store.frameVariant);
+    return file && asset(file);
+  }
+
   $effect(() => {
-    const url = getFrameUrl(store.model, store.color, store.frameVariant);
+    const url = currentFrameUrl();
     const config = getFrame(store.model, store.frameVariant);
     if (!url || !config) return;
     let active = true;
@@ -532,7 +539,7 @@
 
   async function handleExport(resolution: number, format: 'png' | 'mp4') {
     const config = getFrame(store.model, store.frameVariant);
-    const url = getFrameUrl(store.model, store.color, store.frameVariant);
+    const url = currentFrameUrl();
     if (!config || !url) return;
 
     try {
